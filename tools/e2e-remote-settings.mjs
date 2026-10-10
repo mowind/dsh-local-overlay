@@ -725,7 +725,12 @@ async function main() {
       if (body === null || body.method !== "settings/mutate") return null;
       const args = body.payload === undefined ? undefined : body.payload.args;
       if (args === undefined || args.ns !== "ui-settings" || !Array.isArray(args.ops)) return null;
-      const enabledOps = args.ops.filter((op) => op.op === "set" && Array.isArray(op.path) && op.path.length === 1 && op.path[0] === "enabled").map((op) => op.value);
+      /* The round trip claims one switch write per RPC, so a batch carrying anything else is not recognised:
+         the envelope must hold exactly one op, and it has to be a set on the single path ["enabled"]. */
+      if (args.ops.length !== 1) return null;
+      const op = args.ops[0];
+      if (op.op !== "set" || !Array.isArray(op.path) || op.path.length !== 1 || op.path[0] !== "enabled") return null;
+      const enabledOps = [op.value];
       return { seq: request.seq, rpcId: body.rpcId, ns: args.ns, expectedRevision: args.expectedRevision === undefined ? null : args.expectedRevision, enabledOps };
     };
     const settingsWritesAfterRecovery = apiAfterRecovery.map(parseMutate).filter((entry) => entry !== null);
