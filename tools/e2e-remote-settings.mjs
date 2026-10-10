@@ -69,13 +69,25 @@ class Cdp {
     if (params.requestId === undefined) return;
     if (msg.method === "Network.webSocketCreated") this.connections.set(params.requestId, { url: params.url, kind: "WebSocket", createdSeq: msg.seq, closedSeq: null });
     else if (msg.method === "Network.requestWillBeSent" && params.type === "EventSource") this.connections.set(params.requestId, { url: params.request.url, kind: "EventSource", createdSeq: msg.seq, closedSeq: null });
+    else if (msg.method === "Network.webSocketFrameSent" || msg.method === "Network.webSocketFrameReceived") {
+      const connection = this.connections.get(params.requestId);
+      if (connection !== undefined) {
+        const key = msg.method === "Network.webSocketFrameSent" ? "framesSent" : "framesReceived";
+        connection[key] = (connection[key] || 0) + 1;
+        connection.lastFrameSeq = msg.seq;
+      }
+    }
+    else if (msg.method === "Network.webSocketHandshakeResponseReceived") {
+      const connection = this.connections.get(params.requestId);
+      if (connection !== undefined) connection.handshake = { status: params.response === undefined ? null : params.response.status, responseSeq: msg.seq };
+    }
     else if (msg.method === "Network.webSocketClosed" || msg.method === "Network.loadingFailed" || msg.method === "Network.loadingFinished") {
       const connection = this.connections.get(params.requestId);
       if (connection !== undefined && connection.closedSeq === null) connection.closedSeq = msg.seq;
     }
   }
   /* Every streaming connection the browser currently holds open. */
-  liveConnections() { return [...this.connections.entries()].filter(([, c]) => c.closedSeq === null && isStreamTarget(c.url)).map(([requestId, c]) => ({ requestId, url: c.url, kind: c.kind, createdSeq: c.createdSeq })); }
+  liveConnections() { return [...this.connections.entries()].filter(([, c]) => c.closedSeq === null && isStreamTarget(c.url)).map(([requestId, c]) => ({ requestId, url: c.url, kind: c.kind, createdSeq: c.createdSeq, handshake: c.handshake === undefined ? null : c.handshake, framesSent: c.framesSent || 0, framesReceived: c.framesReceived || 0, lastFrameSeq: c.lastFrameSeq === undefined ? null : c.lastFrameSeq })); }
   /* Every teardown the browser reported for a streaming connection after the given sequence number. This is
      the outside observation that a connection really ended, not an inference from a failed fetch. */
   teardownEvents(sinceSeq) {
@@ -345,6 +357,10 @@ async function main() {
   /* After the token redirect the document lives at the origin root, which is also the URL the offline
      reachability probe fetches. */
   const documentUrl = new URL(remoteUrl).origin + "/";
+  /* The authority of the document currently loaded in the browser. A blanket exemption granted to a whole
+     authority is only ever legitimate for an authority the page has LEFT (a retired port after a restart);
+     a failure on the authority the page is on right now has to be named by its own request ID. */
+  let pageAuthority = authorityOf(documentUrl);
   evidence.documentUrl = documentUrl;
   evidence.serverStartLog = instance.out().slice(0, 1500);
   const patchPath = join(profileDir, "cordis.patch.yml");
@@ -398,19 +414,25 @@ async function main() {
   /* The connections the harness itself deliberately discontinued. Every disruptive action it takes (a
      navigation, a reload, the forced offline window, a SIGTERM restart) records the streaming connections
      that were live at that moment, and only those exact request IDs may be tolerated - inside that stage
-     only. A transport that stays broken for a whole stage opens NEW requests, which never enter this set, so
-     a permanently failing transport cannot be waved through by naming the right endpoint. */
+     only. Fresh retry attempts are handled separately (see isDisruptedStreamFailure) and are NEVER exempt on
+     the authority the page is currently on, so a transport that is broken right now has to be named by its
+     own request ID or fail the stage. */
   let discontinued = new Map();
+  /* Every request ID the harness has ever discontinued. The browser never reports a close for a socket it
+     severed through CDP, so such a connection stays in the bookkeeping as if it were still open; anything
+     asserted to be CURRENTLY usable therefore has to be a connection the harness never discontinued. */
+  const everDiscontinued = new Set();
   const discontinue = (reason) => {
     const marked = [];
     for (const connection of cdp.liveConnections()) {
       discontinued.set(connection.requestId, { reason, url: connection.url });
+      everDiscontinued.add(connection.requestId);
       marked.push({ requestId: connection.requestId, kind: connection.kind, url: connection.url });
     }
     evidence["discontinued_" + reason] = (evidence["discontinued_" + reason] || []).concat(marked);
     return marked;
   };
-  const navigate = async (url) => { discontinue("navigation"); await cdp.send("Page.navigate", { url }).catch(() => {}); };
+  const navigate = async (url) => { discontinue("navigation"); pageAuthority = authorityOf(url); await cdp.send("Page.navigate", { url }).catch(() => {}); };
   const reload = async () => { discontinue("reload"); await cdp.send("Page.reload").catch(() => {}); };
   const stageEvents = () => cdp.errorEvents().slice(stageMark);
   /* Classification is structural, never text-based:
@@ -449,8 +471,14 @@ async function main() {
     if (event.method !== "Network.loadingFailed") return "";
     if (event.params.type !== "EventSource" && event.params.type !== "WebSocket") return "";
     if (!isStreamTarget(event.url)) return "";
+    /* Only the network stack can produce a loadingFailed of a stream type on this endpoint, and only a real
+       network-layer failure code is accepted - a page that merely mentions an error string cannot produce one. */
+    if (!/^net::ERR_/.test(String(event.params.errorText === undefined ? "" : event.params.errorText))) return "";
     const authority = authorityOf(event.url);
     if (authority === "") return "";
+    /* The page's CURRENT authority is never exempt as a whole: a transport that is failing there right now
+       must be named by request ID (the legitimately torn-down connection) or fail the stage. */
+    if (authority === pageAuthority) return "";
     const reasons = [...discontinuedInStage.values()].filter((meta) => authorityOf(meta.url) === authority).map((meta) => meta.reason);
     if (reasons.length === 0) return "";
     return "the harness itself disrupted this authority in this stage (" + [...new Set(reasons)].join(", ") + ")";
@@ -488,7 +516,28 @@ async function main() {
     }
     return false;
   };
-  const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl) => {
+  /* A stream connection whose WebSocket handshake really succeeded. Network.webSocketCreated alone only says
+     the browser tried: a refused or blocked handshake still creates the request, so the acceptance test for a
+     recovered transport looks for the 101 response, and it names the settings endpoint explicitly - a
+     /plugins/events EventSource cannot stand in for the settings transport. */
+  const liveMuxConnections = () => cdp.liveConnections().filter((connection) => connection.kind === "WebSocket" && /\/api\/remote\.mux/.test(connection.url) && connection.handshake !== null && connection.handshake.status === 101 && !everDiscontinued.has(connection.requestId));
+  /* Tolerating a teardown must never be the whole story: whenever a stage ends with the page expected to be
+     usable, the page has to be holding a handshaken settings transport again. Otherwise a transport that the
+     harness broke and that never came back could end the stage with no error event and still pass. */
+  const assertLiveTransport = (stage) => {
+    const live = liveMuxConnections();
+    evidence["liveTransport_" + stage] = live;
+    check("the page still holds a working settings transport (" + stage + ")", live.length > 0, JSON.stringify(live).slice(0, 240));
+  };
+  /* The forced-offline window has to reach the SETTINGS TRANSPORT, not merely the document request: the page's
+     own socket (or the app's socket) must be reported as failing on a stream endpoint with the offline code.
+     A page-side probe that returned something other than "failed"/"closed" therefore cannot satisfy it. */
+  const isInducedTransportFailure = (event) => {
+    if (event.method === "Network.loadingFailed") return (event.params.type === "WebSocket" || event.params.type === "EventSource") && isStreamTarget(event.url) && String(event.params.errorText) === "net::ERR_INTERNET_DISCONNECTED";
+    if (event.method === "Log.entryAdded") { const target = isStreamTarget(event.url) ? event.url : quotedUrl(event.params.entry.text); return isStreamTarget(target) && /net::ERR_INTERNET_DISCONNECTED/.test(String(event.params.entry.text)); }
+    return false;
+  };
+  const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl, expectInducedTransport) => {
     const events = stageEvents();
     const discontinuedInStage = discontinued;
     stageMark = cdp.errorEvents().length;
@@ -515,6 +564,11 @@ async function main() {
     if (inducedOfflineUrl !== undefined) {
       evidence["inducedOffline_" + stage] = induced;
       check("the induced offline probe really failed at the network layer (" + stage + ")", induced.some((event) => event.method === "Network.loadingFailed" && event.url === inducedOfflineUrl), JSON.stringify(induced.map((event) => event.text)));
+      if (expectInducedTransport === true) {
+        const transportFailures = induced.filter(isInducedTransportFailure);
+        evidence["inducedTransport_" + stage] = transportFailures;
+        check("the forced offline window really breaks the page's settings transport, not just the document request (" + stage + ")", transportFailures.length > 0, JSON.stringify(transportFailures.map((event) => event.text).slice(0, 2)));
+      }
     }
     const bad = events.filter((event) => !tolerated.some((item) => item.event === event) && !induced.includes(event));
     const what = allowStreamTeardown
@@ -531,6 +585,7 @@ async function main() {
   evidence.switchAfterReload = afterReload;
   if (MODE === "overlay") check("value survives a page refresh on the remote origin", afterReload.state === "false", JSON.stringify(afterReload));
   else check("CONTROL: the remote toggle is lost on refresh", afterReload.state === "true", JSON.stringify(afterReload));
+  assertLiveTransport("afterReload");
   assertNoStageErrors("afterReload", true);
 
   /* A real transport interruption, evidenced from both sides: the page is taken offline through CDP (the
@@ -562,10 +617,13 @@ async function main() {
   const preReconnectClosed = preReconnect.filter((connection) => { const state = cdp.connections.get(connection.requestId); return state !== undefined && state.closedSeq !== null && state.closedSeq > preSeq; });
   evidence.reconnect.preReconnectTeardown = preReconnectTeardown;
   evidence.reconnect.preReconnectClosed = preReconnectClosed;
-  const transportProbe = "new Promise((resolve) => { const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://'; let socket = null; try { socket = new WebSocket(scheme + location.host + '/api/remote.mux'); } catch (error) { resolve('constructor:' + String(error)); return; } socket.onopen = () => resolve('opened'); socket.onerror = () => resolve('failed'); socket.onclose = () => resolve('closed'); setTimeout(() => resolve('timeout'), 4000); })";
+  const transportProbe = "new Promise((resolve) => { const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://'; let socket = null; try { socket = new WebSocket(scheme + location.host + '/api/remote.mux'); } catch (error) { resolve('constructor:' + String(error)); return; } window.__e2eProbeSock = socket; let settled = false; const done = (value) => { if (!settled) { settled = true; resolve(value); } }; socket.onopen = () => done('opened'); socket.onerror = () => done('failed'); socket.onclose = () => done('closed'); setTimeout(() => done('timeout'), 4000); })";
   const transportWhileOffline = await cdp.eval(transportProbe).catch((error) => "eval-failed:" + String(error));
   evidence.reconnect.transportWhileOffline = transportWhileOffline;
-  check("while offline the page cannot open a new transport connection to the settings endpoint", transportWhileOffline !== "opened", String(transportWhileOffline));
+  /* Only a real network-layer OUTCOME counts: "failed" (the browser reported a connection error) or "closed".
+     "timeout", a constructor exception and an evaluation failure are NOT evidence that the network was cut -
+     they are evidence that the harness broke, so they fail the check instead of passing it. */
+  check("while offline the page's own settings transport fails at the network layer (a real error or close, never a probe failure or timeout)", /^(failed|closed)$/.test(String(transportWhileOffline)), String(transportWhileOffline));
   const whileOffline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
   evidence.reconnect.whileOffline = whileOffline;
   check("while offline the page's own transport request genuinely fails", /^rejected:/.test(String(whileOffline)), String(whileOffline).slice(0, 160));
@@ -576,12 +634,18 @@ async function main() {
   const docMarkAfter = String(await cdp.eval("String(window.__e2eDocMark)"));
   const liveAfterReconnect = cdp.liveConnections();
   const recoveredConnections = liveAfterReconnect.filter((connection) => !preReconnectIds.has(connection.requestId));
+  /* A new requestId is not enough: it has to be a WebSocket to the settings endpoint whose handshake actually
+     completed (101), so a socket the browser merely tried to open cannot be reported as a recovery. */
+  const recoveredMux = recoveredConnections.filter((connection) => connection.kind === "WebSocket" && /\/api\/remote\.mux/.test(connection.url) && connection.handshake !== null && connection.handshake.status === 101 && !everDiscontinued.has(connection.requestId));
   evidence.reconnect.afterOnline = afterOnline;
   evidence.reconnect.docMarkAfter = docMarkAfter;
   evidence.reconnect.connectionsAfter = liveAfterReconnect;
   evidence.reconnect.recoveredConnections = recoveredConnections;
+  evidence.reconnect.recoveredMux = recoveredMux;
+  const recoverySeq = cdp.eventSeq;
   check("the page's transport recovers without a reload (same document)", /^status:/.test(String(afterOnline)) && docMarkAfter === docMark, JSON.stringify({ afterOnline, docMark, docMarkAfter }));
   check("the recovered document re-establishes a NEW streaming connection (the old one is not reused)", recoveredConnections.length > 0, JSON.stringify(recoveredConnections));
+  check("the recovered transport is a NEW settings WebSocket whose handshake really succeeded (101), not a merely attempted or unrelated stream", recoveredMux.length > 0, JSON.stringify(recoveredMux));
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-05-after-reconnect.png"));
   const afterReconnect = JSON.parse(await cdp.eval(SWITCH_PROBE));
   evidence.switchAfterReconnect = afterReconnect;
@@ -605,8 +669,27 @@ async function main() {
     };
     check("the recovered transport still writes the setting through to the instance Host", roundTripOn === "CLICKED" && /enabled:\s*true/.test(patchRoundTripOn) && stateRoundTripOn.state === "true", JSON.stringify({ click: roundTripOn, patch: patchRoundTripOn.slice(0, 240) }));
     check("reverting the setting rewrites the stored YAML to exactly its former text", roundTripBack === "CLICKED" && patchRoundTripBack === patchBeforeRoundTrip && stateRoundTripBack.state === "false", JSON.stringify({ clickBack: roundTripBack, sameText: patchRoundTripBack === patchBeforeRoundTrip, state: stateRoundTripBack.state }));
+    /* Binding the writes to the NEW connection: the connections the harness severed must carry no further
+       traffic, and the write must have crossed a transport at all (frames on the new socket, or /api requests
+       after the recovery point). A reconnect that only re-established an unrelated stream would still leave
+       the settings RPC on the old socket - and that is exactly what the first assertion catches. */
+    const muxAfterRoundTrip = cdp.liveConnections().filter((connection) => connection.kind === "WebSocket" && /\/api\/remote\.mux/.test(connection.url));
+    const oldUsedAfterRecovery = preReconnect.filter((connection) => { const state = cdp.connections.get(connection.requestId); return state !== undefined && state.lastFrameSeq !== undefined && state.lastFrameSeq > recoverySeq; });
+    const newMuxFrames = muxAfterRoundTrip.filter((connection) => !preReconnectIds.has(connection.requestId)).reduce((sum, connection) => sum + connection.framesSent + connection.framesReceived, 0);
+    const apiAfterRecovery = cdp.events.filter((event) => event.seq > recoverySeq && event.method === "Network.requestWillBeSent" && /\/api\//.test((event.params.request && event.params.request.url) || ""));
+    evidence.reconnect.roundTripTraffic = { recoverySeq, oldUsedAfterRecovery, newMuxFrames, apiRequestsAfterRecovery: apiAfterRecovery.length, muxAfterRoundTrip };
+    check("no traffic is carried on the connections the harness severed (they are never used again after recovery)", oldUsedAfterRecovery.length === 0, JSON.stringify(oldUsedAfterRecovery));
+    check("the post-recovery settings writes really crossed the transport (traffic observed after the recovery point)", newMuxFrames > 0 || apiAfterRecovery.length > 0, JSON.stringify({ newMuxFrames, apiRequestsAfterRecovery: apiAfterRecovery.length }));
   }
-  assertNoStageErrors("afterReconnect", true, documentUrl);
+  assertLiveTransport("afterReconnect");
+  assertNoStageErrors("afterReconnect", true, documentUrl, true);
+  /* Strict, zero-tolerance window on THIS resumed document, before the harness navigates away from it: once
+     the transport is back and the write round trip has finished, nothing on this page may fail at all. The
+     stage exemption above cannot cover this, because the next navigation destroys the document - and with it
+     the evidence that its own transports stayed healthy. */
+  await sleep(5000);
+  assertLiveTransport("afterReconnectQuiescent");
+  assertNoStageErrors("afterReconnectQuiescent", false);
 
   await navigate(instance.url);
   await waitFor(cdp, SHELL_PROBE, "app shell on loopback");
@@ -640,6 +723,7 @@ async function main() {
   evidence.switchLoopbackAfterRestart = loopbackRestart;
   check("the instance Host holds the persisted value after a restart", loopbackRestart.state === "false", JSON.stringify(loopbackRestart));
 
+  assertLiveTransport("afterLoopbackAccess");
   assertNoStageErrors("afterLoopbackAccess", true);
   await navigate(remoteUrl2);
   await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after restart");
@@ -648,6 +732,7 @@ async function main() {
   evidence.switchAfterRestart = afterRestart;
   if (MODE === "overlay") check("value survives an instance restart on the remote origin", afterRestart.state === "false", JSON.stringify(afterRestart));
   else check("CONTROL: the remote page cannot observe host state (memory mode)", afterRestart.state === "true", JSON.stringify(afterRestart));
+  assertLiveTransport("afterRestart");
   assertNoStageErrors("afterRestart", true);
 
   const fence = await fenceProbes(restarted.port, restarted.search.slice("?token=".length));
@@ -699,10 +784,12 @@ async function main() {
     const providersAfterRollback = loadedProviders(bootAfterRollback);
     evidence.bootProvidersAfterRollback = providersAfterRollback;
     check("after the rollback the page loads exactly one settings provider module again, the upstream package", providersAfterRollback.length === 1 && providersAfterRollback[0] === "@deepseek-ai/dsh-client-ui-settings", JSON.stringify(providersAfterRollback) + " of " + bootAfterRollback.entryCount + " modules");
+    assertLiveTransport("afterRollback");
     assertNoStageErrors("afterRollback", true);
   }
 
   /* Nothing disruptive happens between the last stage and this point, so the final stage tolerates nothing. */
+  assertLiveTransport("atEnd");
   assertNoStageErrors("atEnd", false);
   evidence.consoleFullTail = cdp.errors().slice(-8);
   evidence.consoleEventCount = cdp.errors().length;
