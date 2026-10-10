@@ -37,6 +37,7 @@
   },
   "files": [
     "lib/index.js",
+    "lib/baseline-identity.js",
     "lib/client.js",
     "lib/types/**/*.d.ts",
     "LICENSE",

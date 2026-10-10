@@ -7,7 +7,32 @@
     "commit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
     "repository": "https://github.com/deepseek-ai/deepseek-harness",
     "license": "MIT",
-    "copyright": "Copyright (c) 2026 DeepSeek"
+    "copyright": "Copyright (c) 2026 DeepSeek",
+    "buildIdentity": {
+      "algorithm": "sha256 of the sorted '<path>\\0<sha256(content)>\\n' lines of every file of every recorded package, node_modules and symbolic links excluded",
+      "packages": [
+        ".",
+        "node_modules/@deepseek-ai/dsh-base",
+        "node_modules/@deepseek-ai/dsh-web-app",
+        "node_modules/@deepseek-ai/dsh-client-ui-settings",
+        "node_modules/@deepseek-ai/dsh-client-ui-settings-general",
+        "node_modules/@deepseek-ai/dsh-client-ui-settings-models",
+        "node_modules/@deepseek-ai/dsh-client-ui-settings-account",
+        "node_modules/@deepseek-ai/dsh-client-modules",
+        "node_modules/@deepseek-ai/dsh-client-connection",
+        "node_modules/@deepseek-ai/dsh-api-settings-controller",
+        "node_modules/@deepseek-ai/dsh-api-remotes",
+        "node_modules/@deepseek-ai/dsh-credentials",
+        "node_modules/@deepseek-ai/dsh-credentials-local",
+        "node_modules/@deepseek-ai/cordis",
+        "node_modules/@deepseek-ai/cordis-plugin-loader",
+        "node_modules/@deepseek-ai/cordis-plugin-include"
+      ],
+      "files": 308,
+      "bytes": 7649159,
+      "missing": [],
+      "digest": "bced54ff05f16443449162f00be33c2a0aea802d7f5046648262c0185942e321"
+    }
   },
   "upstreamSources": {
     "@deepseek-ai/dsh-client-ui-settings": "packages/client/ui-settings of the baseline build (MIT, Copyright (c) 2026 DeepSeek)",
@@ -25,6 +50,7 @@
         "clientEntry": "lib/client.js",
         "files": [
           "lib/index.js",
+          "lib/baseline-identity.js",
           "lib/client.js",
           "lib/types/**/*.d.ts",
           "LICENSE",
@@ -34,8 +60,9 @@
         "bundlePatch": null
       },
       "authored": {
-        "package.json": "e1762e6c700a619d1c2f17d0229ff473a4e0df725421778568e12d4c612b1955",
-        "NOTICE": "b78ac28e64abc9c78cb323b0af42e8039197988b273d5f5705dda2154fff303e"
+        "package.json": "d53e112e39ad0178c84a0f44470ae274db26b11c6ea3df42bc8b02f75298142a",
+        "NOTICE": "56f883c960651b4a154647cb4868756e5fc25f099010f57d8d313cefa5fb9883",
+        "lib/baseline-identity.js": "92864357d209d71da4797604d28312383480d51d7bea197e8cc33b77b30211b3"
       }
     },
     {
@@ -93,9 +120,10 @@
       "path": "packages/dsh-client-ui-settings/lib/index.js",
       "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/index.js",
       "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
-      "kind": "verbatim",
-      "sha256": "9c2408bebe9024bdd6dfef91e192753851da3105b913b704132e309e90144c8b",
-      "upstreamSha256": "9c2408bebe9024bdd6dfef91e192753851da3105b913b704132e309e90144c8b"
+      "kind": "modified",
+      "sha256": "d50bcf64f7024ede66cb033eff859e4903cd6586ac2e55abfba98a1401167f60",
+      "upstreamSha256": "9c2408bebe9024bdd6dfef91e192753851da3105b913b704132e309e90144c8b",
+      "expectedDiff": "@@ -1,4 +1,5 @@\n import z from \"@deepseek-ai/schemastery\";\n+import { assertBaselineIdentity } from \"./baseline-identity.js\";\n //#region lib/types/developer-tools-settings.js\n /** Shared Web and desktop developer-tool preference stored by the Host. */\n /** New installations and missing values enable the full interface. */\n@@ -12,6 +13,9 @@\n * @param ctx Plugin context used for optional settings presentation.\n */\n function apply(ctx) {\n+\t/* Refuse to serve on an installation this copy was not verified against: a version\n+\tstring alone cannot tell whether the build underneath still accepts this replacement. */\n+\tassertBaselineIdentity();\n \tctx.inject([\"settings\"], (child) => {\n \t\tchild.effect(() => child.settings.configure({ auto: false }, ctx.fiber));\n \t});\n"
     },
     {
       "path": "packages/dsh-client-ui-settings/lib/types/client/config-form-types.d.ts",

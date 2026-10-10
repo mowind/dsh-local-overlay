@@ -16,13 +16,15 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| [packages/dsh-client-ui-settings/](packages/dsh-client-ui-settings/) | 自有设置组件：上游 `@deepseek-ai/dsh-client-ui-settings` 的版本绑定副本，只改 2 处 |
+| [packages/dsh-client-ui-settings/](packages/dsh-client-ui-settings/) | 自有设置组件：上游 `@deepseek-ai/dsh-client-ui-settings` 的版本绑定副本，只改 2 处；另有自撰并随包发布的构建身份模块 [lib/baseline-identity.js](packages/dsh-client-ui-settings/lib/baseline-identity.js) |
 | [packages/dsh-web-composition/](packages/dsh-web-composition/) | 自有 Web 组合包：上游 `@deepseek-ai/dsh-web-app` patch 层（roster + 4 个 preset）的副本，只改 1 行 |
-| [provenance.json](provenance.json) | 18 个文件的来源清单（路径、上游位置、kind、sha256、`expectedDiff`） |
-| [tools/verify-artifacts.mjs](tools/verify-artifacts.mjs) | 来源预检：核对已安装基线与记录是否一致，不一致则失败退出 |
-| [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) | 端到端验证：真实打包产物 + 隔离 profile + 真实浏览器 |
+| [provenance.json](provenance.json) | 18 个文件的来源清单（路径、上游位置、kind、sha256、`expectedDiff`）与 `baseline.buildIdentity` 构建身份 |
+| [tools/overlay.mjs](tools/overlay.mjs) | 终端入口：`preflight` / `enable` / `status` / `diagnose` / `rollback` / `record`，安装与切换都经它执行 |
+| [tools/verify-artifacts.mjs](tools/verify-artifacts.mjs) | 来源预检的 CLI：核对记录与实际安装（含构建身份），不一致则失败退出 |
+| [tools/lib/preflight.mjs](tools/lib/preflight.mjs) | 预检实现：`verify-artifacts.mjs` 与 `overlay.mjs` 共用同一份检查，不是两份实现 |
+| [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) | 端到端验证：真实打包产物 + 终端入口安装 + 隔离 profile + 真实浏览器 |
 | [evidence/](evidence/) | 最近一次 `control` 与 `overlay` 的证据（JSON + 截图） |
-| [docs/adr/](docs/adr/) | ADR-0001 复用原设置页的版本绑定替换；ADR-0002 单所有者认证边界 |
+| [docs/adr/](docs/adr/) | ADR-0001 版本绑定替换；ADR-0002 单所有者认证边界；ADR-0003 构建身份核验与失败关闭 |
 
 ## 替换机制（为什么这样装配）
 
@@ -36,10 +38,11 @@
 - profile 的 `dsh.profile.bundles` 用 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]` **取代** `@deepseek-ai/dsh-web-app`，因此原组合不会加载，只有一个设置服务。
 - 行 id 仍是 `ui-settings`，所以 `ui-settings` 的 Host 配置命名空间、主机声明和原设置页都保持不变；patch 引擎里 `name` 只是守卫（不匹配会跳过该 patch），因此这里用带 `insert` 的行来改名，而不是改配置。
 - 设置组件的唯一行为差异：不再用 `ctx.remote.$host.isLoopback` 选择持久化模式，非 loopback（已认证）页面也用 `"host"`。`remote.$host.isLoopback` 本身、`/api` 的 Host/Origin 检查、认证门禁、主机编辑器入口的 loopback 判定都未改动。
+- 运行时也核验：设置组件的 `apply()` 第一条语句就核对构建身份，不符即拒绝提供该 provider，没有环境变量或版本范围豁免（[docs/adr/0003](docs/adr/0003-build-identity-verification-and-refusal.md)）。
 
 ## 可复现安装步骤
 
-以下步骤就是 [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) 在 `--mode overlay` 下自动执行的流程，可手工照做。第 1–5 步（建隔离 home、打包、装组件、来源预检、装组合包）在开发时按下面的命令逐条照抄执行过一次，每一步都成功结束；本节记录的 `dsh plugin add` 行为就是那次实测的结果，而不是从源码推测的。
+以下步骤就是 [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) 在 `--mode overlay` 下自动执行的流程：第 2–5 步（打包、来源预检、装组件、装组合包并写回组合列表）现在由终端入口一条命令完成——`node tools/overlay.mjs enable --home "$DSH_HOME" --profile proto`，它先跑预检，不通过就什么都不装、什么都不切；下面的命令是它的手工等价物，逐条可照做。第 1–5 步在开发时按下面的命令逐条照抄执行过一次，每一步都成功结束；本节记录的 `dsh plugin add` 行为就是那次实测的结果，而不是从源码推测的。顺序是关键：**来源预检必须排在两次 `dsh plugin add` 之前**，因为后一个 `add` 会把组合层加进 `dsh.profile.bundles`，装完再预检就不再是「切换前」了。
 
 1. 准备一个隔离的实例 home（不触碰现有实例）：
 
@@ -48,8 +51,10 @@
    mkdir -p "$DSH_HOME/profiles/proto"
    printf '[]\n' > "$DSH_HOME/profiles/proto/cordis.patch.yml"
    printf 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n' > "$DSH_HOME/profiles/proto/pnpm-workspace.yaml"
-   printf '{"name":"dsh-profile-proto","private":true,"dependencies":{},"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base"]}}}\n' > "$DSH_HOME/profiles/proto/package.json"
+   printf '{"name":"dsh-profile-proto","private":true,"dependencies":{},"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base","@deepseek-ai/dsh-web-app"]}}}\n' > "$DSH_HOME/profiles/proto/package.json"
    ```
+
+   初始 bundles 与真实实例一致（基础包 + 原 Web 组合包）：第 5 步要把后者换成自有组合包。
 
 2. 打包两个交付包（真实打包产物，不是源码导入；命令都以仓库根为起点，用子 shell 避免把当前目录留在包内）：
 
@@ -59,7 +64,17 @@
    (cd packages/dsh-web-composition   && npm pack --pack-destination /tmp/dsh-overlay-artifacts)
    ```
 
-3. 先用文档化的 CLI 把设置组件装进 profile（这一步不会切换组合；组合包等预检通过后再装）：
+3. 装任何东西**之前**先跑来源预检（这是门禁，不通过就不要继续）：
+
+   ```bash
+   node tools/verify-artifacts.mjs
+   ```
+
+   它要求已安装的 DSH 正好是记录的基线版本，逐文件核对 sha256 与改动 diff，核对两个交付包实际打包出的文件清单、两个自有 manifest 的字段（包名、版本、基线标记、`files` 清单、`dsh.bundle.patch` 的顺序与重复项）、包内 `provenance.json` 与仓库副本逐字节一致，以及固定包清单的**构建身份**摘要（[docs/adr/0003](docs/adr/0003-build-identity-verification-and-refusal.md)）；不匹配则退出码 1 并列出问题。门禁必须正好排在这里：下一次 `dsh plugin add` 之后组合就已经变了，装完再预检就不再是「切换前」。
+
+   自动化脚本还会跑负向对照，都要求退出码 1：改坏记录里某个 verbatim 文件的 sha256；把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验；以及三份 `cp -al` 硬链接副本（未改动的必须通过、把版本号改成 `9.9.9` 的、改坏一个已记录文件的）——后两份用来证明「只比版本字符串」和「同版本不同产物」都过不了门禁。
+
+4. 预检通过后，用文档化的 CLI 把设置组件装进 profile（这一步不改组合）：
 
    ```bash
    DSH_HOME="$DSH_HOME" dsh plugin --profile proto add /tmp/dsh-overlay-artifacts/dsh-local-overlay-dsh-client-ui-settings-0.1.0.tgz
@@ -67,26 +82,16 @@
 
    先装组件是必须的：组合包的 roster 行要能从 profile 的 `node_modules` 解析到它。
 
-   `dsh plugin add` 的实测行为（按本文命令逐条照抄执行过）：包一定进 profile 的 `node_modules`；如果这个包**是**组合层（manifest 里有 `dsh.bundle.patch`），它会顺带把 `dsh.profile.bundles` 重写成「基础包 + 本次添加的包」。所以装组件后 bundles 仍是 `["@deepseek-ai/dsh-base"]`，装组合包后（下一步）被改写成 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`；想装多个组合层时每次 `add` 之前都要重新写一遍期望的 bundles（自动化脚本就是这样做的）。顺带一提，profile 的 `node_modules` 里只会出现我们自己装的 `@dsh-local-overlay/*`：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 是从 DSH 安装目录解析的，这也是验证脚本查组合层时要先查 profile、再回退到安装目录的原因。
+   `dsh plugin add` 的实测行为（按本文命令逐条照抄执行过，与 `@deepseek-ai/dsh-app-boot` 的 `reconcileProfilePlugins` 一致）：包一定进 profile 的 `node_modules`；如果这个包**是**组合层（manifest 里有 `dsh.bundle.patch`），它会**把自身追加到** `dsh.profile.bundles` 末尾，不删除已有的层。所以这一步之后 bundles 仍是 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]`。顺带一提，profile 的 `node_modules` 里只会出现我们自己装的 `@dsh-local-overlay/*`：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 是从 DSH 安装目录解析的，这也是验证脚本查组合层时要先查 profile、再回退到安装目录的原因。
 
-4. 装组合包**之前**先跑来源预检（这是门禁，不通过就不要继续）：
-
-   ```bash
-   node tools/verify-artifacts.mjs
-   ```
-
-   它要求已安装的 DSH 正好是记录的基线版本，逐文件核对 sha256 与改动 diff，核对两个交付包实际打包出的文件清单、两个自有 manifest 的字段（包名、版本、基线标记、`files` 清单、`dsh.bundle.patch` 的顺序与重复项）以及包内 `provenance.json` 与仓库副本逐字节一致；不匹配则退出码 1 并列出问题。
-
-   门禁必须正好排在这一步：下一行的 `dsh plugin add` 自己就会把组合切过去，装完再预检就不再是「切换前」了。自动化脚本还会跑两次负向对照：故意改坏记录里某个 verbatim 文件的 sha256，以及把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验，两次都要求退出码 1。
-
-5. 只有预检通过，才把自有组合包装进 profile（这一次 `add` 会把 `dsh.profile.bundles` 自己改成 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`，不再包含 `@deepseek-ai/dsh-web-app`）：
+5. 装自有组合包，并把 `dsh.profile.bundles` 里原有的组合层**换成**它：
 
    ```bash
    DSH_HOME="$DSH_HOME" dsh plugin --profile proto add /tmp/dsh-overlay-artifacts/dsh-local-overlay-web-composition-0.1.0.tgz
-   node -e 'console.log(require(process.env.DSH_HOME + "/profiles/proto/package.json").dsh.profile.bundles)'
+   node -e 'const f = process.env.DSH_HOME + "/profiles/proto/package.json"; const m = require(f); const b = m.dsh.profile.bundles.filter((n) => n !== "@deepseek-ai/dsh-web-app"); if (!b.includes("@dsh-local-overlay/web-composition")) b.push("@dsh-local-overlay/web-composition"); m.dsh.profile.bundles = b; require("fs").writeFileSync(f, JSON.stringify(m, null, 2) + "\n"); console.log(b);'
    ```
 
-   第二行应打印 `[ '@deepseek-ai/dsh-base', '@dsh-local-overlay/web-composition' ]`。要装多个组合层时，每次 `add` 之前重新写一遍期望的 bundles（自动化脚本就是这样做的）。
+   第二行应打印 `[ '@deepseek-ai/dsh-base', '@dsh-local-overlay/web-composition' ]`。这一步不能省：`add` 只做追加（实测从 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]` 出发、装完组合包变成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@dsh-local-overlay/web-composition"]`），两个组合层同时加载就会出现两个 `ui-settings` 提供者。要装多个组合层时，同样在 `add` 之后显式写一遍期望的 bundles（自动化脚本走终端入口 `enable`，由它统一写）。
 
 6. 启动实例（隔离 home，非 loopback 来源要显式声明为可信主机）：
 
@@ -133,9 +138,17 @@ node tools/e2e-remote-settings.mjs --mode control                 # 控制组：
 node tools/e2e-remote-settings.mjs --mode overlay                 # 覆盖组：自有组合包
 ```
 
-两个模式断言同一批事实：真实打包产物、由文档化 CLI 装入隔离 profile（并在每次 `add` 之后读回 `dsh.profile.bundles`：装组件不切组合、装组合包自己切组合，这正说明门禁必须排在装组合包之前）、**所有已加载组合层里恰好只有一行 ui-settings provider（且它指向预期的包）**、页面侧 `window.__DSH_BOOT__` 里设置 provider 模块恰好只有一个（`-account`、`-general`、`-models` 等同族设置包在任何配置下都会加载，按精确包名排除）、组合替换生效、从非 loopback 来源加载页面、远程页面不暴露主机配置编辑器入口、远程点击能被接受、持久化行为、刷新后的取值、**一次真实的传输中断**（先记录文档当时持有的流连接，CDP 离线必须成功 → 离线期间页面既打不开新的传输连接、它自己发的请求也确实失败 → 恢复后**同一文档、不带刷新**多出一条新的流连接并仍显示 Host 值；`overlay` 模式还在恢复后的连接上把开关写一次再写回来，证明这条连接真的能写入 Host，而不只是能连通）、重启后的取值、控制台异常在 6 个阶段（初次加载、刷新后、重连后、loopback 访问后、重启后、结束时；`overlay` 模式另有第 7 个「回退后」阶段）逐段断言，以及 18 项 fence/认证检查：`/api` 上可信 Host 不带 cookie 与 loopback 不带 cookie 都是 401（未认证不越界）；未知 Host 是 403，且**带上已认证 cookie 仍是 403**（认证不能绕过 Host fence）；同一枚 authority 绑定的 cookie 在可信 Host 上同时通过 fence 与认证门禁（读到 404，即真的到达了那个故意不存在的探针路由——若网络层失败拿到 `status: 0` 就不算通过），而把它重放到 loopback authority 上会被判 401（会话 cookie 绑定 authority，不能跨 authority 复用）；单独的跨站 `Origin`（不带 `Sec-Fetch-Site`）是 403；单独的 `Sec-Fetch-Site: cross-site`（不带 `Origin`）是 403；两者同时是 403；这两个信号各自**再带上已认证 cookie** 仍然是 403；`Origin` 与 Host 相同的对照请求能穿过 fence 到达认证门禁；对真实传输端点 `/api/remote.mux` 的三次 WebSocket 升级尝试（未知 Host 403、可信 Host 未认证 401、两者都过时真的升级成功）证明升级路径不被绕过；文档带 token 是 303 加 `location: ./` 与 Set-Cookie，无 token 是 401。每个 fence 信号单独探测，避免一个信号的有效拒绝掩盖另一个信号的失效。证据写入 [evidence/](evidence/) 的 `<mode>-evidence.json` 与 `<mode>-NN-*.png` 截图，任一检查失败时退出码为 1。
+两个模式断言同一批事实：真实打包产物、由终端入口 `overlay.mjs enable` 装入隔离 profile（它先跑预检、装组件、装组合包，再把 `dsh.profile.bundles` 里的 `@deepseek-ai/dsh-web-app` 就地换成自有组合包，并断言读回正是 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`；`dsh plugin add` 自己只会把组合层**追加**进列表，替换层这件事必须显式做，这也是预检必须排在安装之前的原因）、**所有已加载组合层里恰好只有一行 ui-settings provider（且它指向预期的包）**、页面侧 `window.__DSH_BOOT__` 里设置 provider 模块恰好只有一个（`-account`、`-general`、`-models` 等同族设置包在任何配置下都会加载，按精确包名排除）、组合替换生效、从非 loopback 来源加载页面、远程页面不暴露主机配置编辑器入口、远程点击能被接受、持久化行为、刷新后的取值、**一次真实的传输中断**（先记录文档当时持有的流连接，CDP 离线必须成功 → 离线期间页面既打不开新的传输连接、它自己发的请求也确实失败 → 恢复后**同一文档、不带刷新**多出一条新的流连接并仍显示 Host 值；`overlay` 模式还在恢复后的连接上把开关写一次再写回来，证明这条连接真的能写入 Host，而不只是能连通）、重启后的取值、控制台异常在 6 个阶段（初次加载、刷新后、重连后、loopback 访问后、重启后、结束时；`overlay` 模式另有第 7 个「回退后」阶段）逐段断言，以及 18 项 fence/认证检查：`/api` 上可信 Host 不带 cookie 与 loopback 不带 cookie 都是 401（未认证不越界）；未知 Host 是 403，且**带上已认证 cookie 仍是 403**（认证不能绕过 Host fence）；同一枚 authority 绑定的 cookie 在可信 Host 上同时通过 fence 与认证门禁（读到 404，即真的到达了那个故意不存在的探针路由——若网络层失败拿到 `status: 0` 就不算通过），而把它重放到 loopback authority 上会被判 401（会话 cookie 绑定 authority，不能跨 authority 复用）；单独的跨站 `Origin`（不带 `Sec-Fetch-Site`）是 403；单独的 `Sec-Fetch-Site: cross-site`（不带 `Origin`）是 403；两者同时是 403；这两个信号各自**再带上已认证 cookie** 仍然是 403；`Origin` 与 Host 相同的对照请求能穿过 fence 到达认证门禁；对真实传输端点 `/api/remote.mux` 的三次 WebSocket 升级尝试（未知 Host 403、可信 Host 未认证 401、两者都过时真的升级成功）证明升级路径不被绕过；文档带 token 是 303 加 `location: ./` 与 Set-Cookie，无 token 是 401。每个 fence 信号单独探测，避免一个信号的有效拒绝掩盖另一个信号的失效。证据写入 [evidence/](evidence/) 的 `<mode>-evidence.json` 与 `<mode>-NN-*.png` 截图，任一检查失败时退出码为 1。
 
-`overlay` 模式在装组合包**之前**就会跑来源预检；预检失败即抛错中止（`provenance preflight failed; refusing to install the artifacts and switch the composition`），不会用未核对基线的副本继续验证。同一个预检还会跑两次负向对照：把记录里某个 verbatim 文件的 sha256 故意改坏，以及把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验，两次都要求退出码 1，证明门禁不是永远通过。
+`overlay` 模式在装任何东西**之前**就会跑来源预检；预检失败时终端入口打印 `refusing to install or switch anything` 并退出 1，profile 目录逐字节不变，也不会用未核对基线的副本继续验证。同一个预检还会跑两次负向对照：把记录里某个 verbatim 文件的 sha256 故意改坏，以及把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验，两次都要求退出码 1，证明门禁不是永远通过。
+
+`overlay` 模式还会用三份**硬链接副本**（`cp -al`，复制品与安装在同一个文件系统内，绝不触碰真实安装）验证「版本号不是身份」：未改动的副本通过；把副本 `package.json` 的 `version` 改成 `9.9.9` 被拒（`installed version is 9.9.9, recorded 0.2.1-alpha.2`）；把同版本副本里一个已记录文件（`node_modules/@deepseek-ai/cordis/LICENSE`）改一个字节也被拒（`installed build differs from the recorded build identity`）。终端入口指向被拒副本时退出 1 并打印 `refusing to install or switch anything`，同时 profile 目录（manifest、patch、是否装过自有包、状态文件）逐字节不变——失败的预检不可能留下半装状态。
+
+同一份被拒副本还被用来验证**运行时**也拒绝：用它的 `lib/bin.js` 启动第二个实例，日志里出现 `refusing to serve the settings provider` 与 `differs from the recorded build identity`，对该实例的 `settings/mutate`（`ui-settings`）返回 `ok:false` 且 `error.code === "settings/rejected"`，patch 保持原样；`overlay.mjs diagnose --install <被拒副本>` 退出 1，而真实安装仍然通过预检。
+
+「浏览器产物被改坏」是另一类失败，单独验证：在 profile 里已装的 `node_modules/@dsh-local-overlay/dsh-client-ui-settings/lib/client.js` 的 `apply()` 首行**注入一次** `throw`（外科式改动，而不是把整文件换成一个 `throw`：模块仍然能加载，只在注册自己时抛错——那正是下载残缺或被篡改的产物在页面里的样子），随后 `diagnose` 退出 1 并点名该文件（`lib/client.js as installed in the profile (…) differs from the recorded artifact (…)`）；页面整页 boot 失败——该 provider 持有设置面与 `configForms` 服务，它一倒，`locale`/`theme`/`layout` 等 47 个 entry 全部 `pending (waiting for service: configForms)`，根槽没注册，boot 报告把 `@dsh-local-overlay/dsh-client-ui-settings` 记为 `failed`。没有任何写入被当成成功（patch 逐字节未变）。这一阶段的控制台错误正是「测试自己造的产物失败」，所以只在 boot 报告**点名自有 entry** 时才被容忍，被容忍的事件逐条记入 `inducedArtifact_afterDamagedArtifact`，并且那条点名观察本身是必过的自证断言——豁免不会静默生效。把原始字节写回并核对 sha256 后 `diagnose` 恢复通过，设置面也回来了。
+
+回退同样走终端入口：`node tools/overlay.mjs rollback --home "$DSH_HOME" --profile proto`。这一阶段先用页面同一套 RPC 写一条普通配置（`session-log-deepseek` 命名空间）和一个一次性测试凭据，回退后断言：普通配置行与它的 `enabled: false` 仍在、`- id: ui-settings` 那条的 `name` 守卫回到上游包名且 `config` 原样保留、`bundles` 回到 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]`、两个自有包仍然装着（只回退选择，不卸包）、`credentials/describe` 对该 ref 只回 `configured: true`（不回明文）、`$DSH_HOME/.credentials.yaml` 仍在且权限仍是 `600`。重启后 patch 与回退后**逐字节相同**（那条保存的 override 原样留着：既没被读回去，也没被丢掉），但页面读数回到 `"true"`：上游 provider 在非 loopback 页面上把状态留在页面里（与控制组逐项一致——控制组同样是初次打开 `true`、点一下 `false`、刷新回 `true`），也就是保存的 `enabled: false` 不再被读取；再点开关只翻转页面且 patch 不变，刷新即恢复原值——原组合的远程限制确实回来了。
 
 控制台断言按阶段**结构性**分类，不靠错误文本关键词：`Runtime.exceptionThrown` 与 `Runtime.consoleAPICalled` 的 error 在任何阶段、两种模式下都判失败，消息里出现 `net::ERR_*` 字样也换不来豁免；`Script`、`Stylesheet`、`Document`、`Fetch`、`XHR` 等类型的 `Network.loadingFailed` 在任何阶段都判失败（强制断网窗口内由测试自己触发的两类失败除外，见下）。
 
@@ -143,9 +156,9 @@ node tools/e2e-remote-settings.mjs --mode overlay                 # 覆盖组：
 
 强制断网阶段另有一类**必需证据**（`inducedOffline_afterReconnect`）：测试自己造成的 `ERR_INTERNET_DISCONNECTED` 必须真的在网络上出现，且不能只被静默容忍——具体是文档 URL 上的 `Fetch` 失败，以及测试自己发起的传输探针在流端点上的失败，两者都必须有记录。传输探针本身的返回值也被收紧：只有 `failed`（浏览器报告连接错误）或 `closed` 才算离线证据，`timeout`、构造函数异常、`eval-failed` 一律判**失败**而不是通过——探针自己坏掉不等于网络被切断。除了「文档请求在离线期间真的失败」之外，还额外断言强制的离线窗口**真的打到了设置传输**（`inducedTransport_afterReconnect`：流端点上的 `WebSocket`/`EventSource` 失败，或它的网络日志回声，且必须携带 `ERR_INTERNET_DISCONNECTED`），只有文档请求失败不算数。结构性容忍的流拆除连同理由逐条记入 `tolerated_<stage>`，被测试自己诱发的离线失败单独记入 `inducedOffline_<stage>`，每阶段被主动拆掉的连接记入 `discontinuedConnections_<stage>`。
 
-最近一次记录（基线 `0.2.1-alpha.2` / `d7432673`，冻结树）：`control` 55 项全部通过，`overlay` 74 项全部通过，两个模式退出码都是 0，日志里没有任何 `FAIL` 行。`overlay` 多出的 19 项净增量来自：来源预检与它的两次负向对照（改坏记录里的 sha256、调换组合包 `dsh.bundle.patch` 顺序）、用文档化 CLI 装包后**逐次**读回 `dsh.profile.bundles`、单行 provider 与单设置模块断言、真实传输中断与恢复后 Host 写回环的额外断言（其中「写入发生在恢复之后、且不再走被拆掉的旧连接」被拆成三条独立断言：旧连接在恢复点之后不得再出现帧增量、写请求必须被解析成 `settings/mutate` RPC、恢复后的 mux 连接必须有帧活动），以及最后整段「文档化回退被真实执行」的断言（含回退阶段自己的控制台断言）。
+最近一次记录（基线 `0.2.1-alpha.2` / `d7432673`，冻结树）：`control` 55 项全部通过，`overlay` 114 项全部通过，两个模式退出码都是 0，日志里没有任何 `FAIL` 行。`overlay` 多出的 59 项净增量来自：来源预检与它的两次负向对照（改坏记录里的 sha256、调换组合包 `dsh.bundle.patch` 顺序）、终端入口写入并读回 `dsh.profile.bundles`（已有的上游 `ui-settings` 守卫行会被迁移成自有包名、`config` 原样保留，`state.guardRows` 记 1）、单行 provider 与单设置模块断言、真实传输中断与恢复后 Host 写回环的额外断言（其中「写入发生在恢复之后、且不再走被拆掉的旧连接」被拆成三条独立断言：旧连接在恢复点之后不得再出现帧增量、写请求必须被解析成 `settings/mutate` RPC、恢复后的 mux 连接必须有帧活动），三份硬链接副本上的安装身份负向对照（未改动副本通过、改版本被拒、同版本改一个已记录文件被拒）、失败预检下终端入口拒绝且 profile 逐字节不变、运行时拒绝整套断言（第二实例日志、`settings/rejected`、`diagnose` 退出 1）、损坏浏览器产物阶段（诊断点名 + 整页 boot 失败 + 无假成功 + 恢复），替换期间新增的无关组合层（`@dsh-local-overlay/e2e-unrelated-layer`）在回退后仍然在列表里、测试凭据的值逐字节未变（不只是 `configured: true`）、以 `DSH_INSTALL` 指向获准安装也救不了被改坏的启动副本（拒绝跟随的是**启动脚本**），以及整段「文档化回退被真实执行」的断言（含回退阶段自己的控制台断言、普通配置与测试凭据的保留、凭据脱敏与文件权限、重启后 patch 逐字节不变而远程限制恢复）。
 
-同一份证据里的关键取值（`overlay`）：远程页面开关初始为开（`"true"`，浏览器本地态），点一下后刷新、重连、重启、回退重启之后都读到 `"false"`（每次都是 2 行：`Show coding view` 为关、Host 提供的 `Upload Session Log when using the official model API` 为开）；组合层里重定向到自有包的 `ui-settings` 行只有一行（`./cordis.patch.yml:301`），页面侧 boot 里设置 provider 模块也只有自有包一个，回退后重新变回上游包。
+同一份证据里的关键取值（`overlay`）：启用后远程页面开关初始为开（`"true"`，浏览器本地态），点一下读到 `"false"`，此后刷新、重连、重启读到的都是 `"false"`（每次都是 2 行：`Show coding view` 为关、Host 提供的 `Upload Session Log when using the official model API` 为开）——这正是「替换期间远程页面能持久化」的直接证据；回退并重启后同一页面只剩 1 行、读数回到 `"true"`，点一下 `"false"`、刷新回 `"true"`（与控制组逐项一致），而服务端 patch 里那条保存的 `enabled: false` 依然在、只是不再被读取。组合层里重定向到自有包的 `ui-settings` 行只有一行（`./cordis.patch.yml:301`），页面侧 boot 里设置 provider 模块也只有自有包一个，回退后重新变回上游包。
 
 `/api` 上的 fence 判定为可信 Host 无 cookie 401、loopback 无 cookie 401、未知 Host 403、未知 Host **带已认证 cookie 仍 403**、可信 Host 带同一枚 cookie 404（fence 与认证都过了，只是这个探针路由不存在）、同一枚 cookie 重放到 loopback authority 401、单独 `Origin` 403、单独 `Sec-Fetch-Site` 403、两者同时 403、这两个信号各自**再带 cookie** 仍是 403、`Origin` 与 Host 相同的对照 401；`/api/remote.mux` 的三次 WebSocket 升级尝试分别是 403、401 与**真的升级成功**（101）；文档带 token 303 加 `location: ./` 与 Set-Cookie、无 token 401。
 
@@ -159,21 +172,49 @@ node tools/e2e-remote-settings.mjs --mode overlay                 # 覆盖组：
 
 ## 适用边界与未覆盖
 
-- 只对记录的基线 `0.2.1-alpha.2` / `d7432673` 有效。换 DSH 版本必须重新生成副本、重算 `provenance.json` 并重跑证据。
+- 只对记录的基线 `0.2.1-alpha.2` / `d7432673` 有效。换 DSH 版本必须重新生成副本、重算 `provenance.json`（`node tools/overlay.mjs record` 会一并重新记录构建身份）并重跑证据。
 - 不做所有者与访客的权限隔离；不改认证与 Host/Origin 检查；不提供多实例协调。
 - 「非 loopback 来源」在这里只指**浏览器的 origin 与 Host 头**非 loopback（TCP 仍然连本机）。本仓没有做公网绑定或多机部署，真实网络位置需要 SSH 隧道或另一台机器；按 ADR-0002:5，生产侧的 Cloudflare 边界不在本原型验证范围内。
-- 供应链只锁到「已安装基线 + 18 个复制文件的 sha256 + 两个自有 manifest 的字段」这一层：不固定 tarball 哈希、不签名、不校验 pnpm 锁文件。
-- 没有覆盖账号登录门禁的负向用例、设置写入冲突（revision 竞争）、以及 secret 字段的负向用例；回退段落里「凭据不会丢」是读实现得出的推论（只有 `name` 守卫被改，`config` 原样保留），没有用真实 secret 做过负向用例。
+- 供应链锁到「已安装基线 + 18 个复制文件的 sha256 + 两个自有 manifest 的字段 + 构建身份」这一层：仍不固定 tarball 哈希、不签名、不校验 pnpm 锁文件。构建身份只覆盖那份 16 个包的策划清单（308 个文件、7,649,159 字节），不含其余目录与依赖的嵌套 `node_modules`。
+- 没有覆盖账号登录门禁的负向用例，也没有覆盖设置写入冲突（revision 竞争）。`overlay` 模式的回退阶段现在用**一次性测试凭据**（写进 throwaway `DSH_HOME`，不是真实密钥）验证「回退保留凭据」：回退后该 ref 仍在 `.credentials.yaml` 且权限仍是 `600`，`credentials/describe` 只回 `configured` 标志。这验证的是凭据文件与读取脱敏，不构成对真实密钥生命周期的验证。
+
+## 终端入口（安装、诊断与重新记录）
+
+所有会改动 profile 的动作都经由 [tools/overlay.mjs](tools/overlay.mjs) 执行，只想看不动手时用 `status` / `diagnose`：
+
+```bash
+node tools/overlay.mjs preflight                                # 只核对来源清单与构建身份，不改动任何东西
+node tools/overlay.mjs enable    --home "$DSH_HOME" --profile proto   # 先预检，再打包、装两个包、切换组合并把已保存的 override 接到自有 provider
+node tools/overlay.mjs status    --home "$DSH_HOME" --profile proto   # 当前组合、装了哪些自有包、保存的配置
+node tools/overlay.mjs diagnose  --home "$DSH_HOME" --profile proto   # 预检 + profile 内已装产物与记录逐文件比对
+node tools/overlay.mjs rollback  --home "$DSH_HOME" --profile proto   # 只撤销自有组合与包选择
+node tools/overlay.mjs record                                   # 换基线后重新记录来源清单与构建身份
+```
+
+- `--home` 对每个 profile 命令都是必填的：工具从不猜 home，因此不可能误操作正在服务的生产实例。`--install` / `--dsh-bin` 可以指向另一份安装（例如验证用的硬链接副本），`--artifacts` 指定打包产物的落地目录。
+- 退出码：`0` 成功；`1` 拒绝或发现问题（预检不过、诊断发现问题）；`2` 用法错误。
+- `enable` 先跑预检，不通过就打印 `refusing to install or switch anything` 并说明 profile 未被触碰——不存在「先装一半再发现」的路径；它写的状态文件 `dsh-local-overlay.state.json` 只有原 bundle 列表、构建身份、时间、包名与「改写了几条 `name` 守卫」，**不含**任何配置快照。
+- `enable` 还会把实例自己 patch 里已有的 `- id: ui-settings` 覆盖行的 `name` 守卫改写成自有组件名（`config` 原样保留）：否则那条已经保存的配置会因为守卫不匹配而整条被跳过，用户会看到设置「自己变回去了」。`rollback` 做的是这句话的反向，并且只换掉自有组合这一项。
+- 构建身份发现「哪份安装」时以**本进程的启动脚本**（`<install>/lib/bin.js`）为锚点，`DSH_INSTALL` 只是终端与测试调用方的显式覆盖，排在它后面：环境变量不能把门禁引向另一份获准安装而掩盖真正在跑的代码。
+- 构建身份不符时先跑 `diagnose`：它会把安装层面的差异（版本、构建身份、缺失的包）与 profile 层面的差异（已装产物与记录里的 sha256 不一致，直接点名文件）分开列出。
 
 ## 组件回退
 
-回退要两步，顺序不能反，而且**不要删掉那条 patch**：
+```bash
+node tools/overlay.mjs rollback --home "$DSH_HOME" --profile proto
+```
 
-1. 先把 profile `cordis.patch.yml` 里那条 `- id: ui-settings` 的 `name:` 守卫改回上游包名 `name: "@deepseek-ai/dsh-client-ui-settings"`（等价做法是只删掉 `name:` 这一行，保留 `id`、`config` 与已保存的凭据）。
-2. 再把 `dsh.profile.bundles` 恢复为 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]`。
+这条命令做的就是手工两步，顺序不能反，而且**不要删掉那条 patch**：
+
+1. 把 profile `cordis.patch.yml` 里那条 `- id: ui-settings` 的 `name:` 守卫改回上游包名 `name: "@deepseek-ai/dsh-client-ui-settings"`（保留 `id`、`config` 与已经保存的配置）。
+2. 把 `dsh.profile.bundles` 里的自有组合换成它顶掉的那个上游 roster：**只**从当前列表里摘掉 `@dsh-local-overlay/web-composition`，再把 `@deepseek-ai/dsh-web-app` 放回它原来的位置（默认回到 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]`）。替换期间新增的其它层一律保持原样——回退不是把状态文件里记下的整份旧列表写回去，那种写法会把别人后来加的层一起删掉。
+
+回退**只**撤销这两项——自有组合的选择与自有包的加载：不恢复任何整份配置快照，不删除凭据（它们在 `$DSH_HOME/.credentials.yaml`，全程没有被谁动过），也不回滚替换期间修改过的普通配置。加 `--remove-packages` 才会再把两个自有包从 profile 的 `node_modules` 里移除（默认保留，方便再次启用或继续诊断）。
 
 为什么不能「只换 bundles」：patch 引擎对非 `insert` 的补丁只把 `name` 当守卫，名字不匹配时会警告 `patch: name mismatch for ... skipping` 并**整条跳过**，于是回去加载的原 provider 收不到 `enabled: false`，用户会看到设置「自己变回去了」，而 patch 文件里还留着我们的包名。
 
 为什么不能「删掉 patch 或清成 `[]`」：那等于把已保存的实例配置（可能还有凭据）一起丢掉；ADR-0001 要求覆盖层可回退且回退后保留配置。改 `name` 守卫只是让这条 patch 重新指向上游 provider，`config` 里的值原样继续生效。
 
-这条回退路径不是纸上说明：`--mode overlay` 的最后一步会真实执行它（只改 `name` 守卫 → 把 `bundles` 换回 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]` → 重启），并断言两件事：保存的值仍然生效（开关仍是关闭），以及页面又只加载一个设置模块、且是上游包。
+这条回退路径不是纸上说明：`--mode overlay` 的最后一步就用上面这条命令真实执行它，并断言保存的配置行本身原样留着（`id`、`config` 与值都没被改成快照里的旧值）、替换期间写的普通配置行仍在、测试凭据连**值**都逐字节未变且依旧只回 `configured` 标志、`bundles` 只换掉自有组合一项（同时装入的无关层保留），以及页面又只加载一个设置模块、且是上游包。
+
+回退后打开远程页面时，那条保存的 override 会**原样留在文件里但不再被读取**：上游 provider 在非 loopback 页面上把状态留在页面内存里（与未替换的控制组逐项一致：首次打开为开，点一下只在页面里变关，刷新或重启后又回到开）。这正是「撤销替换」要达到的效果——原来的远程限制回来了，而实例配置一个字没丢；想让它重新生效就再 `enable` 一次。

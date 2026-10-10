@@ -6,17 +6,44 @@ Upstream license: MIT, Copyright (c) 2026 DeepSeek
 Upstream build identity: declared candidate baseline commit d743267388641bc76f17c45ce8b4c231aed1d32c.
 The installation this copy was taken from carries no git metadata, so the commit is
 not independently verifiable from it; what tools/verify-artifacts.mjs does check
-locally is the installed package name/version, the per-file sha256 of every copy
-and the exact recorded diff of every modified file.
+locally is the installed package name/version, the per-file sha256 of every copy,
+the exact recorded diff of every modified file, and one installation-wide build
+identity (baseline.buildIdentity in provenance.json) computed over the packages
+this replacement rides on. "Build identity" means: for every package in that list,
+hash every file below it (recursively, skipping nested node_modules and symlinks),
+sort by path, and hash the resulting path+content-hash lines. A version string
+alone cannot tell two builds of the same version apart; the digest can.
 
 Copied files (recorded hashes and the exact differing lines live in provenance.json, shipped in this package):
-  lib/index.js         verbatim copy
+  lib/index.js         copy; the host entry adds the build-identity check
+                       (see "Modification summary" below)
   lib/client.js        copy; the module registration id and the persistence
                        selection differ from upstream
   lib/types/**/*.d.ts  verbatim copies
 
-Modification summary: the browser half no longer derives its persistence mode
+Authored files (not copied from upstream; hashed in provenance.json):
+  lib/baseline-identity.js
+                       build identity algorithm and the runtime guard. It
+                       recomputes the digest and refuses to serve the settings
+                       provider when the running installation is not the recorded
+                       build. The terminal preflight (tools/lib/preflight.mjs)
+                       imports this same file, so the gate an operator runs and
+                       the check the provider runs are one implementation.
+
+Modification summary, host half (lib/index.js): apply() calls assertBaselineIdentity() from
+lib/baseline-identity.js before it registers anything, so the provider refuses to serve when
+the running installation is not the recorded build.
+
+Modification summary, browser half (lib/client.js): the browser half no longer derives its persistence mode
 from remote.$host.isLoopback. Upstream keeps every preference process-local
 ("memory") on a non-loopback page; this copy keeps the Host-backed persistence
 ("host") on every authenticated page. remote.$host.isLoopback itself, the
 transport fence, the entry id ui-settings and the page plugins are unchanged.
+
+The Host half additionally refuses to serve at all unless this installation is the
+recorded build: lib/index.js imports lib/baseline-identity.js and checks the
+package name, the version, the recorded file list and the digest before it
+registers anything, and it throws instead of registering when they differ. There
+is no environment variable, version range or compatibility exemption that bypasses
+that check, so a mismatch is a refusal rather than a silently different behaviour.
+Terminal recovery: node tools/overlay.mjs diagnose / rollback / record.

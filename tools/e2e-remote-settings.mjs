@@ -1,8 +1,9 @@
 import { spawn, execFileSync } from "node:child_process";
-import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { cpSync, existsSync, realpathSync } from "node:fs";
+import { readFile, writeFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { cpSync, existsSync, realpathSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import http from "node:http";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +11,11 @@ const TEST_HOST = process.env.TEST_HOST || "dsh-proto.test";
 const CHROMIUM = process.env.CHROMIUM || "/usr/sbin/chromium";
 const OVERLAY_SCOPE = "@dsh-local-overlay";
 const FORK_PACKAGE = OVERLAY_SCOPE + "/dsh-client-ui-settings";
+/* A credential the harness stores through the public RPC and then looks for after the rollback. It is a test
+   value, never a real secret, and it exists only inside the throwaway DSH_HOME of this run. */
+const TEST_CREDENTIAL_REF = "DSH_E2E_TEST_CREDENTIAL";
+/* A throwaway bundle layer installed while the replacement is active: the rollback has to leave it alone. */
+const UNRELATED_LAYER = OVERLAY_SCOPE + "/e2e-unrelated-layer";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /* The two server-push transports a loaded page holds open, and the authority of a transport URL.
    Every console/network tolerance below is bound to a connection that already existed when the stage
@@ -37,6 +43,12 @@ function resolveDshBin() {
 const DSH_BIN = resolveDshBin();
 const DSH_INSTALL = DSH_BIN.slice(0, DSH_BIN.indexOf("/lib/bin.js"));
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const OVERLAY_TOOL = join(REPO_ROOT, "tools/overlay.mjs");
+const VERIFY_TOOL = join(REPO_ROOT, "tools/verify-artifacts.mjs");
+/* Installations this test has to edit get their own copy, and the copy wants hard links (cp -al): the
+   copy has to be reachable on the SAME filesystem as the installation, which a temporary directory is
+   not guaranteed to be. The copies are removed again at the end of the run. */
+const COPY_BASE = join(homedir(), ".cache", "dsh-local-overlay-e2e-" + process.pid);
 
 const args = process.argv.slice(2);
 const argValue = (name, fallback) => { const i = args.indexOf(name); return i === -1 ? fallback : args[i + 1]; };
@@ -118,7 +130,7 @@ class Cdp {
 
   send(method, params = {}) { const id = ++this.seq; return new Promise((res, rej) => { this.pending.set(id, { res, rej }); this.ws.send(JSON.stringify({ id, method, params })); }); }
   async eval(expression) { const r = await this.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error("eval failed: " + JSON.stringify((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text)); return r.result.value; }
-  errorEvents() { return this.events.filter((e) => e.method === "Runtime.exceptionThrown" || (e.method === "Log.entryAdded" && e.params.entry.level === "error") || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error") || e.method === "Network.loadingFailed").map((e) => ({ seq: e.seq, method: e.method, params: e.params, url: (e.method === "Network.loadingFailed" ? (this.requestUrls.get(e.params.requestId) || "") : (e.params.entry && e.params.entry.url) || ""), text: e.method + " " + JSON.stringify(e.params).slice(0, 240) })); }
+  errorEvents() { return this.events.filter((e) => e.method === "Runtime.exceptionThrown" || (e.method === "Log.entryAdded" && e.params.entry.level === "error") || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error") || e.method === "Network.loadingFailed").map((e) => ({ seq: e.seq, method: e.method, params: e.params, url: (e.method === "Network.loadingFailed" ? (this.requestUrls.get(e.params.requestId) || "") : (e.params.entry && e.params.entry.url) || ""), text: e.method + " " + JSON.stringify(e.params).slice(0, 240), full: e.method + " " + JSON.stringify(e.params) })); }
   errors() { return this.errorEvents().map((e) => e.text); }
   screenshot(path) { return this.send("Page.captureScreenshot", { format: "png" }).then((s) => writeFile(path, Buffer.from(s.data, "base64"))); }
 }
@@ -146,8 +158,8 @@ async function openSettings(cdp, shot) {
   if (shot) await cdp.screenshot(shot);
 }
 
-async function startInstance(home, profile) {
-  const child = spawn(process.execPath, [DSH_BIN, profile, "--host", "127.0.0.1", "--port", "0", "--no-open", "--trusted-host", TEST_HOST], { env: { ...process.env, DSH_HOME: home }, stdio: ["ignore", "pipe", "pipe"] });
+async function startInstance(home, profile, bin = DSH_BIN, extraEnv = {}) {
+  const child = spawn(process.execPath, [bin, profile, "--host", "127.0.0.1", "--port", "0", "--no-open", "--trusted-host", TEST_HOST], { env: { ...process.env, DSH_HOME: home, ...extraEnv }, stdio: ["ignore", "pipe", "pipe"] });
   let out = ""; let err = "";
   child.stdout.on("data", (d) => { out += d; });
   child.stderr.on("data", (d) => { err += d; });
@@ -274,6 +286,83 @@ function runProvenancePreflight() {
   }
 }
 
+/* Drives one of the two terminal entry points and reports its exit code, so a refusal can be asserted
+   instead of throwing the harness off its track. */
+function runTool(script, args, env) {
+  try {
+    return { code: 0, output: String(execFileSync(process.execPath, [script, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...(env || {}) } })) };
+  } catch (error) {
+    return { code: typeof error.status === "number" ? error.status : 1, output: String(error.stdout || "") + String(error.stderr || "") };
+  }
+}
+
+/* A copy of an installation that this test is allowed to edit. Every variant gets its OWN link tree, so
+   replacing a file in a variant (unlink first, then write) leaves the real installation's inode alone. */
+function cloneInstall(from, to) {
+  try { execFileSync("cp", ["-al", from, to], { stdio: ["ignore", "pipe", "pipe"] }); return "hard links"; }
+  catch (error) { cpSync(from, to, { recursive: true, verbatimSymlinks: true }); return "copied bytes"; }
+}
+
+/* Writing over a hard-linked file reaches the original inode, so the link is broken before the write. */
+async function replaceFile(path, content) { await rm(path, { force: true }); await writeFile(path, content); }
+
+const readJson = async (path) => JSON.parse(await readFile(path, "utf8"));
+
+/* The settings and credentials RPC the page itself uses, called from Node: the GET mints the session
+   cookie and the POST carries the request envelope. Needed wherever a broken instance has to answer over
+   HTTP instead of through the page. */
+async function callRpc(port, token, method, args) {
+  const authority = TEST_HOST + ":" + port;
+  const index = await fetchRaw("http://127.0.0.1:" + port + "/?token=" + token, { host: authority });
+  const cookie = (index.cookies || []).map((value) => value.split(";")[0]).join("; ");
+  const payload = JSON.stringify({ type: "client-request", rpcId: "e2e-" + method.replace(/\W/g, "-") + "-" + Date.now(), method, payload: { args } });
+  return await new Promise((resolve) => {
+    const request = http.request({ host: "127.0.0.1", port, path: "/api/" + method, method: "POST", headers: { host: authority, cookie, "content-type": "application/json", "content-length": Buffer.byteLength(payload) }, timeout: 10000 }, (response) => {
+      let body = "";
+      response.on("data", (chunk) => { body += chunk; });
+      response.on("end", () => { try { resolve(JSON.parse(body).result); } catch (error) { resolve({ ok: false, raw: body.slice(0, 400) }); } });
+    });
+    request.on("error", (error) => resolve({ ok: false, raw: String(error.message) }));
+    request.on("timeout", () => { request.destroy(); resolve({ ok: false, raw: "timeout" }); });
+    request.write(payload);
+    request.end();
+  });
+}
+
+/* The profile's own state, byte for byte: what a refusal or a rollback must never change by accident. */
+async function profileSnapshot(profileDir, patchPath) {
+  const manifest = await readFile(join(profileDir, "package.json"), "utf8");
+  const patch = existsSync(patchPath) ? await readFile(patchPath, "utf8") : "";
+  const statePath = join(profileDir, "dsh-local-overlay.state.json");
+  const state = existsSync(statePath) ? await readFile(statePath, "utf8") : "";
+  const installed = existsSync(join(profileDir, "node_modules", FORK_PACKAGE));
+  return manifest + "\n---\n" + patch + "\n---\n" + state + "\n---\n" + String(installed);
+}
+
+/* The block one "- id: <id>" patch row covers, up to the next top-level row. */
+function patchRow(text, id) {
+  const start = String(text).indexOf("- id: " + id);
+  if (start === -1) return "";
+  const tail = String(text).slice(start);
+  const end = tail.indexOf("\n- id:", 1);
+  return end === -1 ? tail : tail.slice(0, end);
+}
+
+/* Read one credential value out of $DSH_HOME/.credentials.yaml without a YAML parser: the file is small and
+   shaped as "refs:" followed by indented "<REF>: <value>" lines. */
+function storedCredentialValue(text) {
+  const match = String(text).match(new RegExp("^[ \\t]+" + TEST_CREDENTIAL_REF + ":[ \\t]*(\\S+)[ \\t]*$", "m"));
+  return match === null ? null : match[1];
+}
+
+/* A bound client for one running instance, so a stage names only the method and its arguments. */
+function rpcFor(instance) {
+  const url = instance instanceof URL ? instance : new URL(instance);
+  const port = Number(url.port);
+  const token = url.search.slice("?token=".length);
+  return (method, args) => callRpc(port, token, method, args);
+}
+
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "dsh-e2e-" + MODE + "-"));
   const home = join(root, "home");
@@ -281,10 +370,20 @@ async function main() {
   await mkdir(profileDir, { recursive: true });
   await writeFile(join(profileDir, "cordis.patch.yml"), "[]\n");
   await writeFile(join(profileDir, "pnpm-workspace.yaml"), "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n");
-  const bundles = MODE === "control" ? ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] : ["@deepseek-ai/dsh-base"];
+  /* Both modes start from the composition a real instance carries, so the overlay gate has something to
+     replace and the rollback has something to restore. */
+  const bundles = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
   await writeFile(join(profileDir, "package.json"), JSON.stringify({ name: "dsh-profile-proto", private: true, dependencies: {}, dsh: { profile: { bundles } } }, null, 2) + "\n");
   evidence.root = root;
   await mkdir(EVIDENCE_DIR, { recursive: true });
+  /* The profile's own patch file, read in every stage: a refusal, a restart or a rollback must never change
+     it except where the change is the point of the stage. */
+  const patchPath = join(profileDir, "cordis.patch.yml");
+  const readPatch = async () => { try { return await readFile(patchPath, "utf8"); } catch (error) { return "<missing: " + error.code + ">"; } };
+  /* The install copies outlive the install stage: a later stage points a second instance at the damaged copy
+     to show what the running replacement does with a build it never verified. */
+  const copies = join(COPY_BASE, "install-copies");
+  const damagedCopy = join(copies, "damaged");
 
   if (MODE === "overlay") {
     const preflight = runProvenancePreflight();
@@ -318,45 +417,64 @@ async function main() {
     catch (error) { reorderRefused = true; reorderRefusal = String(error.stdout || "") + String(error.stderr || ""); }
     evidence.negativeReorder = { refused: reorderRefused, output: reorderRefusal.trim().split("\n").slice(-3) };
     check("a reordered bundle-patch manifest is refused too (the record pins the manifest, not just the files)", reorderRefused && /changed since it was recorded|patch sequence/.test(reorderRefusal), reorderRefusal.trim().split("\n").slice(-2).join(" | "));
-    const buildDir = join(root, "artifacts");
-    await mkdir(buildDir, { recursive: true });
-    const packs = [];
-    for (const dir of ["packages/dsh-client-ui-settings", "packages/dsh-web-composition"]) {
-      const out = execFileSync("npm", ["pack", "--pack-destination", buildDir, "--silent"], { cwd: dir, encoding: "utf8" }).trim().split("\n").pop();
-      packs.push(join(buildDir, out));
-    }
-    evidence.artifacts = packs;
-    check("real packaged artifacts built (npm pack)", packs.length === 2 && packs.every((p) => existsSync(p)), packs.join(", "));
-    /* The loaded bundle list is reset to base-only before each add, so what the CLI does to it is visible. */
-    const bundlesAfterEachAdd = [];
-    for (const pack of packs) {
-      const manifestBefore = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
-      manifestBefore.dsh = { profile: { bundles: ["@deepseek-ai/dsh-base"] } };
-      await writeFile(join(profileDir, "package.json"), JSON.stringify(manifestBefore, null, 2) + "\n");
-      try { execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", "proto", "add", pack], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
-      catch (error) { check("dsh plugin add " + pack, false, String(error.stdout || "").slice(-400) + String(error.stderr || "").slice(-400)); }
-      const manifestAfterAdd = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
-      bundlesAfterEachAdd.push({ pack: pack.split("/").pop(), bundles: (manifestAfterAdd.dsh && manifestAfterAdd.dsh.profile && manifestAfterAdd.dsh.profile.bundles) || [] });
-    }
-    evidence.bundlesAfterEachAdd = bundlesAfterEachAdd;
-    /* Measured CLI behaviour: adding a plain component only installs it, while adding a composition package
-       rewrites dsh.profile.bundles itself. That is why the provenance gate has to run BEFORE this loop. */
-    check("adding the component package leaves the loaded bundle list untouched", JSON.stringify(bundlesAfterEachAdd[0].bundles) === JSON.stringify(["@deepseek-ai/dsh-base"]), JSON.stringify(bundlesAfterEachAdd[0]));
-    check("adding the composition package switches the loaded bundle list by itself (the gate must precede it)", JSON.stringify(bundlesAfterEachAdd[1].bundles) === JSON.stringify(["@deepseek-ai/dsh-base", OVERLAY_SCOPE + "/web-composition"]), JSON.stringify(bundlesAfterEachAdd[1]));
+    /* The acceptance test drives the terminal entry point, so the operator's own command is what installs
+       and switches here: nothing in this section edits the profile by hand. */
+    await mkdir(copies, { recursive: true });
+    const pristineCopy = join(copies, "pristine");
+    const versionCopy = join(copies, "version");
+    const mechanisms = [cloneInstall(DSH_INSTALL, pristineCopy), cloneInstall(DSH_INSTALL, versionCopy), cloneInstall(DSH_INSTALL, damagedCopy)];
+    evidence.installCopies = { base: COPY_BASE, mechanisms, pristine: pristineCopy, version: versionCopy, damaged: damagedCopy };
+    /* A different version of the same package, and the SAME version whose content changed: neither may pass
+       the gate, so a version string alone is never what this replacement trusts. */
+    const versionManifest = await readJson(join(versionCopy, "package.json"));
+    await replaceFile(join(versionCopy, "package.json"), JSON.stringify({ ...versionManifest, version: "9.9.9" }, null, 2) + "\n");
+    const damagedFile = join(damagedCopy, "node_modules/@deepseek-ai/cordis/LICENSE");
+    await replaceFile(damagedFile, (await readFile(damagedFile, "utf8")) + "\n/* DSH_E2E_DAMAGED_INSTALLATION */\n");
+    const pristineCheck = runTool(VERIFY_TOOL, ["--quiet", "--install", pristineCopy]);
+    const versionCheck = runTool(VERIFY_TOOL, ["--quiet", "--install", versionCopy]);
+    const damagedCheck = runTool(VERIFY_TOOL, ["--quiet", "--install", damagedCopy]);
+    evidence.installCopyChecks = { pristine: pristineCheck.code, version: versionCheck.code, damaged: damagedCheck.code };
+    check("an untouched copy of the installation passes the same preflight as the installation itself", pristineCheck.code === 0, pristineCheck.output.trim().split("\n").slice(-1)[0]);
+    check("an installation carrying another version of the same package is refused (the version is checked, not compared as a string)", versionCheck.code === 1 && /installed version is 9\.9\.9, recorded 0\.2\.1-alpha\.2/.test(versionCheck.output), versionCheck.output.trim().split("\n").slice(-2).join(" | "));
+    check("a SAME-version installation whose recorded file changed is refused too (the build identity catches it)", damagedCheck.code === 1 && /installed build differs from the recorded build identity/.test(damagedCheck.output), damagedCheck.output.trim().split("\n").slice(-2).join(" | "));
+    /* The gate runs inside the terminal entry point as well: pointed at an installation it must refuse, it
+       has to leave the profile byte-for-byte as it was, so a failed preflight can never half-install. */
+    const snapshotBeforeRefusal = await profileSnapshot(profileDir, patchPath);
+    const refusedEnable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", "proto", "--install", damagedCopy]);
+    evidence.enableRefused = refusedEnable.output.trim().split("\n").slice(-4);
+    check("the terminal entry point refuses to install or switch anything when the preflight fails", refusedEnable.code === 1 && /refusing to install or switch anything/.test(refusedEnable.output), refusedEnable.output.trim().split("\n").slice(-2).join(" | "));
+    check("a refused enable leaves the profile exactly as it was (no half install, no switch, no state file)", (await profileSnapshot(profileDir, patchPath)) === snapshotBeforeRefusal, "profile state unchanged");
+    /* An instance that already saved a setting through the upstream provider carries that override in its own
+       patch file. Enable has to carry the row over to the own provider, or the saved value would silently stop
+       applying the moment the composition changes (the patch engine matches the row by its name guard). */
+    const seededOverride = '- id: ui-settings\n  name: "@deepseek-ai/dsh-client-ui-settings"\n  config:\n    enabled: true\n';
+    await writeFile(patchPath, seededOverride);
+    evidence.files.profilePatchSeeded = seededOverride;
+    const enable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", "proto", "--install", DSH_INSTALL, "--dsh-bin", DSH_BIN, "--artifacts", join(root, "artifacts")]);
+    evidence.enableOutput = enable.output.trim().split("\n").slice(-8);
+    check("the documented enable runs the preflight and then installs the artifacts itself", enable.code === 0 && /provenance verification PASSED/.test(enable.output) && /switched dsh\.profile\.bundles/.test(enable.output), enable.output.trim().split("\n").slice(-3).join(" | "));
+    const artifactNames = await readdir(join(root, "artifacts"));
+    evidence.artifacts = artifactNames.map((name) => join(root, "artifacts", name));
+    check("real packaged artifacts built (npm pack)", artifactNames.length === 2 && artifactNames.every((name) => name.endsWith(".tgz")), artifactNames.join(", "));
     const manifestPath = join(profileDir, "package.json");
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    evidence.profileManifestAfterAdd = manifest;
+    const manifest = await readJson(manifestPath);
+    evidence.profileManifestAfterEnable = manifest;
+    const nextBundles = (manifest.dsh && manifest.dsh.profile && manifest.dsh.profile.bundles) || [];
+    check("enable loads the own composition in place of the upstream roster", JSON.stringify(nextBundles) === JSON.stringify(["@deepseek-ai/dsh-base", OVERLAY_SCOPE + "/web-composition"]), JSON.stringify(nextBundles));
     check("both artifacts installed into the profile by the documented CLI", Boolean(manifest.dependencies[OVERLAY_SCOPE + "/web-composition"] && manifest.dependencies[FORK_PACKAGE]), JSON.stringify(manifest.dependencies));
-    const nextBundles = ["@deepseek-ai/dsh-base", OVERLAY_SCOPE + "/web-composition"];
-    manifest.dsh = { profile: { bundles: nextBundles } };
-    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
     check("original web composition is not loaded", manifest.dependencies["@deepseek-ai/dsh-web-app"] === undefined, JSON.stringify(nextBundles));
-    const installedRoster = await readFile(join(profileDir, "node_modules", OVERLAY_SCOPE, "web-composition", "cordis.patch.yml"), "utf8");
-    check("installed roster routes the ui-settings row to the fork", /- id: ui-settings\n\s+name: .@dsh-local-overlay\/dsh-client-ui-settings./.test(installedRoster), "row ui-settings -> " + FORK_PACKAGE);
-    const settingsRows = await loadedSettingsRows(profileDir, nextBundles);
-    evidence.loadedSettingsRows = settingsRows;
-    check("exactly one ui-settings provider row exists across all loaded composition layers", settingsRows.length === 1, JSON.stringify(settingsRows));
-    check("the single settings provider row is served by the fork package", settingsRows.length === 1 && settingsRows[0].provider === FORK_PACKAGE, JSON.stringify(settingsRows));
+    /* The swap record holds the bundle list it replaced and the build it was verified against, and nothing
+       that could be mistaken for a configuration snapshot: the saved settings belong to the instance. */
+    const swapPath = join(profileDir, "dsh-local-overlay.state.json");
+    const swap = existsSync(swapPath) ? await readJson(swapPath) : null;
+    evidence.swapState = swap;
+    const patchAfterEnable = await readPatch();
+    evidence.files.profilePatchAfterEnable = patchAfterEnable;
+    const enabledOverrideBlock = patchRow(patchAfterEnable, "ui-settings");
+    check("enable carries an override saved through the upstream provider over to the own provider", enabledOverrideBlock.includes('name: "@dsh-local-overlay/dsh-client-ui-settings"'), enabledOverrideBlock.replace(/\n/g, " | ").slice(0, 240));
+    check("enable keeps that override's saved configuration (the row is translated, never replaced)", /id: ui-settings\n\s+name: "@dsh-local-overlay\/dsh-client-ui-settings"\n\s+config:\n\s+enabled: true\n?$/.test(enabledOverrideBlock), enabledOverrideBlock.replace(/\n/g, " | ").slice(0, 240));
+    check("enable records that it translated a saved override row", swap !== null && swap.guardRows === 1, JSON.stringify(swap && swap.guardRows));
+    check("enable records the bundle list it replaced and the verified build, and no configuration snapshot", swap !== null && swap.schema === "dsh-local-overlay/state@1" && JSON.stringify(swap.previousBundles) === JSON.stringify(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]) && typeof swap.identity === "string" && !JSON.stringify(swap).includes("cordis.patch") && !JSON.stringify(swap).includes("config"), JSON.stringify(swap));
   } else {
     check("control run loads the original web composition", true, JSON.stringify(bundles));
     const controlRows = await loadedSettingsRows(profileDir, bundles);
@@ -377,8 +495,6 @@ async function main() {
   let pageAuthority = authorityOf(documentUrl);
   evidence.documentUrl = documentUrl;
   evidence.serverStartLog = instance.out().slice(0, 1500);
-  const patchPath = join(profileDir, "cordis.patch.yml");
-  const readPatch = async () => { try { return await readFile(patchPath, "utf8"); } catch (error) { return "<missing: " + error.code + ">"; } };
   evidence.files.profilePatchInitial = await readPatch();
 
   const { chrome, cdp } = await startChromium(join(root, "chromium"));
@@ -569,7 +685,7 @@ async function main() {
     if (event.method === "Log.entryAdded") { const target = isStreamTarget(event.url) ? event.url : quotedUrl(event.params.entry.text); return isStreamTarget(target) && /net::ERR_INTERNET_DISCONNECTED/.test(String(event.params.entry.text)); }
     return false;
   };
-  const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl, expectInducedTransport) => {
+  const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl, expectInducedTransport, inducedArtifactPatterns) => {
     const events = stageEvents();
     const discontinuedInStage = discontinued;
     stageMark = cdp.errorEvents().length;
@@ -601,7 +717,17 @@ async function main() {
         check("the forced offline window really breaks the page's settings transport, not just the document request (" + stage + ")", transportFailures.length > 0, JSON.stringify(transportFailures.map((event) => event.text).slice(0, 2)));
       }
     }
-    const bad = events.filter((event) => !tolerated.some((item) => item.event === event) && !induced.includes(event));
+    /* A damaged browser artifact is a failure the harness itself produced, and it is tolerated only when the
+       events show what that artifact did to the page: the first pattern has to NAME the damaged entry, and the
+       remaining patterns are the boot-failure signature that entry's absence produces. The naming observation is
+       asserted below, so this exemption can never pass silently. */
+    const artifactText = (event) => String(event.full) + " " + String(event.text);
+    const inducedArtifact = inducedArtifactPatterns === undefined ? [] : events.filter((event) => inducedArtifactPatterns.some((pattern) => artifactText(event).includes(pattern)));
+    if (inducedArtifactPatterns !== undefined) {
+      evidence["inducedArtifact_" + stage] = inducedArtifact.map((event) => ({ method: event.method, url: event.url, full: String(event.full).slice(0, 1500) }));
+      check("the damaged browser artifact really failed in the page (" + stage + ")", inducedArtifact.some((event) => String(event.full).includes(inducedArtifactPatterns[0])), JSON.stringify(inducedArtifact.map((event) => String(event.full).slice(0, 300)).slice(0, 2)));
+    }
+    const bad = events.filter((event) => !tolerated.some((item) => item.event === event) && !induced.includes(event) && !inducedArtifact.includes(event));
     const what = allowStreamTeardown
       ? "no runtime exceptions or console errors beyond the transport the harness itself tore down"
       : "no console exceptions, failures or protocol errors";
@@ -793,7 +919,9 @@ async function main() {
   assertLiveTransport("afterLoopbackAccess");
   assertNoStageErrors("afterLoopbackAccess", true);
   await navigate(remoteUrl2);
-  await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after restart");
+  // A restarted instance re-serves the remote origin from a cold cache; under CPU load the
+  // 25s default is not enough, so give this boot its own budget instead of failing the run.
+  await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after restart", 60000);
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-08-remote-after-restart.png"));
   const afterRestart = JSON.parse(await cdp.eval(SWITCH_PROBE));
   evidence.switchAfterRestart = afterRestart;
@@ -824,33 +952,198 @@ async function main() {
   check("auth: the document without a token is unauthorized", fence.indexNoToken.status === 401, JSON.stringify(fence.indexNoToken));
 
   if (MODE === "overlay") {
-    /* The documented rollback is verified, not just asserted: migrate ONLY the name guard of the saved
-       override back to the upstream provider name, switch the bundles back to the original composition,
-       restart, and then require that the saved value is STILL in effect. Deleting the entry or emptying the
-       patch would lose the saved configuration, which is exactly what ADR-0001 forbids. */
-    const guardBefore = await readPatch();
-    const guardAfter = guardBefore.replace('name: "@dsh-local-overlay/dsh-client-ui-settings"', 'name: "@deepseek-ai/dsh-client-ui-settings"');
-    check("the rollback rewrites only the name guard of the saved override", guardBefore !== guardAfter && /id: ui-settings/.test(guardAfter) && /enabled: false/.test(guardAfter), guardAfter.replace(/\n/g, " | "));
-    await writeFile(patchPath, guardAfter);
-    evidence.files.profilePatchAfterRollbackGuard = guardAfter;
-    const rollbackManifest = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
-    rollbackManifest.dsh = { profile: { bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] } };
-    await writeFile(join(profileDir, "package.json"), JSON.stringify(rollbackManifest, null, 2) + "\n");
+    /* A build the record does not describe must be refused at RUNTIME as well, not only while installing: the
+       instance is started from a hard-link copy of the installation whose recorded file was changed, so the
+       real installation is never touched. Both the refusal in its log and a rejected settings write are
+       required, and the real installation is re-checked afterwards to prove the copy left no trace.
+       DSH_INSTALL deliberately points at the APPROVED installation while this unapproved copy runs: the gate
+       must follow the script the process actually runs, so an environment variable cannot mask a tampered
+       build (a compatibility-style exemption is exactly what must not bypass the check). */
+    const damagedInstance = await startInstance(home, "proto", join(damagedCopy, "lib/bin.js"), { DSH_INSTALL: DSH_INSTALL });
+    evidence.damagedInstanceEnv = { DSH_INSTALL: DSH_INSTALL, argv1: join(damagedCopy, "lib/bin.js") };
+    evidence.damagedInstanceUrl = damagedInstance.url;
+    await sleep(4000);
+    const damagedLog = damagedInstance.out() + damagedInstance.err();
+    evidence.damagedInstanceLog = damagedLog.split("\n").filter((line) => /dsh-local-overlay|refusing|identity/.test(line)).slice(0, 12);
+    check("an instance started from a build the record does not describe refuses to serve the settings provider", /refusing to serve the settings provider/.test(damagedLog), evidence.damagedInstanceLog.join(" | ").slice(0, 320));
+    check("the runtime refusal names the recorded build identity and the installed one", /differs from the recorded build identity/.test(damagedLog) && /recorded [0-9a-f]{16}/.test(damagedLog), evidence.damagedInstanceLog.join(" | ").slice(0, 320));
+    check("the refusal follows the script the process runs, not DSH_INSTALL pointing at the approved installation", /refusing to serve the settings provider/.test(damagedLog) && damagedLog.includes(damagedCopy), "DSH_INSTALL pointed at " + DSH_INSTALL);
+    const damagedWrite = await rpcFor(damagedInstance.url)("settings/mutate", { ns: "ui-settings", ops: [{ op: "set", path: ["enabled"], value: true }] });
+    evidence.damagedWrite = damagedWrite;
+    check("a settings write against the unverified build is rejected instead of reported as saved", damagedWrite.ok === false && Boolean(damagedWrite.error) && damagedWrite.error.code === "settings/rejected", JSON.stringify(damagedWrite).slice(0, 300));
+    check("the rejected write left the saved override untouched", (await readPatch()) === evidence.files.profilePatchAfterRestart, "patch unchanged");
+    const damagedDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", damagedCopy]);
+    evidence.diagnoseDamagedInstall = damagedDiagnose.output.trim().split("\n").slice(-6);
+    check("the terminal diagnose refuses the same unverified build the instance refused", damagedDiagnose.code === 1 && /installed build differs from the recorded build identity/.test(damagedDiagnose.output), evidence.diagnoseDamagedInstall.join(" | ").slice(0, 320));
+    damagedInstance.child.kill("SIGTERM");
+    await sleep(1500);
+
+    /* The browser half of the replacement is a packed artifact too. Damaging it INSIDE the profile is what a
+       broken download or a tampered unpack looks like: the page must not be able to present a working settings
+       surface, nothing may be written on its behalf, and the terminal has to be able to name the artifact. */
+    const installedClientPath = join(profileDir, "node_modules", FORK_PACKAGE, "lib", "client.js");
+    const clientBytes = await readFile(installedClientPath);
+    const clientSha = createHash("sha256").update(clientBytes).digest("hex");
+    evidence.installedClient = { path: installedClientPath, sha256: clientSha, bytes: clientBytes.length };
+    const patchBeforeArtifactDamage = await readPatch();
+    /* The damage must be a *browser artifact* failure, not a syntactically dead file: the packed module keeps
+       loading, and the provider throws exactly where it registers itself. That is what a broken download or a
+       tampered unpack looks like to the page. */
+    const damagePoint = "function apply(ctx) {";
+    const pristineText = clientBytes.toString("utf8");
+    const damagedText = pristineText.replace(damagePoint, damagePoint + "\n\t\t\tthrow new Error(\"DSH_E2E_DAMAGED_BROWSER_ARTIFACT\");");
+    check("the harness really changed the packed browser artifact (not a no-op write)", damagedText !== pristineText && damagedText.includes("DSH_E2E_DAMAGED_BROWSER_ARTIFACT"), "throw injected into " + damagePoint);
+    await replaceFile(installedClientPath, damagedText);
+    const artifactDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", DSH_INSTALL]);
+    evidence.diagnoseDamagedArtifact = artifactDiagnose.output.trim().split("\n").slice(-6);
+    check("the terminal diagnose names the damaged browser artifact instead of calling the profile healthy", artifactDiagnose.code === 1 && /lib\/client\.js as installed in the profile/.test(artifactDiagnose.output), evidence.diagnoseDamagedArtifact.join(" | ").slice(0, 320));
+    discontinue("damaged artifact reload");
+    await reload();
+    /* Either the shell still renders and the settings surface is gone, or the page does not come back at all:
+       both are "no working settings surface", and neither may be reported as a successful enable. */
+    let shellAfterDamage = true;
+    try { await waitFor(cdp, SHELL_PROBE, "app shell after the browser artifact was damaged", 12000); }
+    catch (error) { shellAfterDamage = false; }
+    await cdp.eval(SETTINGS_TRIGGER).catch(() => {});
+    await sleep(4000);
+    await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-10-damaged-browser-artifact.png"));
+    const damagedSwitch = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    evidence.switchAfterDamagedArtifact = { shellRendered: shellAfterDamage, probe: damagedSwitch };
+    check("the page carrying the damaged artifact cannot present a usable settings toggle", shellAfterDamage === false || damagedSwitch.state === null || damagedSwitch.disabled === "true", JSON.stringify(evidence.switchAfterDamagedArtifact).slice(0, 280));
+    check("nothing was written on behalf of the broken page (no false success)", (await readPatch()) === patchBeforeArtifactDamage, "patch unchanged");
+    if (shellAfterDamage) assertLiveTransport("afterDamagedArtifact");
+    else evidence.liveTransportAfterDamagedArtifact = "the page never rendered: there is no surface left to hold a transport";
+    /* The tolerated events are exactly what this damaged artifact did to the page: the boot report names OUR
+       entry as failed, and the page dies from that entry's absence (it owns the settings surface and the
+       configForms service, so everything downstream of it stays pending). The first pattern is the naming
+       observation the helper asserts, so the exemption is never silent. */
+    assertNoStageErrors("afterDamagedArtifact", true, undefined, undefined, [
+      "@dsh-local-overlay/dsh-client-ui-settings: failed",
+      "renderSlot('root') before any 'root' registration",
+      "entries did not activate",
+    ]);
+    /* Recovery is a terminal action, and the restored artifact has to give the settings surface back. */
+    await replaceFile(installedClientPath, clientBytes);
+    const restoredBytes = await readFile(installedClientPath);
+    check("the browser artifact was restored byte for byte", restoredBytes.equals(clientBytes) && createHash("sha256").update(restoredBytes).digest("hex") === clientSha, "sha256 " + clientSha.slice(0, 16));
+    const restoredDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", DSH_INSTALL]);
+    check("the terminal diagnose is clean again once the artifact is restored", restoredDiagnose.code === 0, restoredDiagnose.output.trim().split("\n").slice(-1)[0]);
+    discontinue("artifact restore reload");
+    await cdp.send("Network.clearBrowserCache").catch(() => {});
+    await reload();
+    await sleep(7000);
+    await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-11-artifact-restored.png"));
+    const restoredSwitch = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    evidence.switchAfterArtifactRestore = restoredSwitch;
+    check("the restored artifact gives the settings surface back", restoredSwitch.state === "false", JSON.stringify(restoredSwitch).slice(0, 240));
+    assertLiveTransport("afterArtifactRestore");
+    assertNoStageErrors("afterArtifactRestore", true);
+  }
+
+  if (MODE === "overlay") {
+    /* The rollback is exercised through the documented terminal command, and its blast radius is the point:
+       it may undo its OWN composition and package choice, and nothing else. Before it runs, the harness stores
+       an ordinary (unrelated) setting and a test credential through the public RPC, so both can be looked for
+       afterwards. Restoring an old configuration snapshot - which would discard them - is what this forbids. */
+    const rpc = rpcFor(restarted);
+    const ordinaryWrite = await rpc("settings/mutate", { ns: "session-log-deepseek", ops: [{ op: "set", path: ["enabled"], value: false }] });
+    evidence.ordinaryWrite = ordinaryWrite;
+    check("an ordinary, unrelated setting can be written through the public RPC during the replacement", ordinaryWrite.ok === true, JSON.stringify(ordinaryWrite).slice(0, 240));
+    const credentialWrite = await rpc("credentials/set", { ref: TEST_CREDENTIAL_REF, value: "e2e-not-a-real-secret" });
+    evidence.credentialWrite = credentialWrite;
+    check("a test credential can be stored through the public RPC during the replacement", credentialWrite.ok === true, JSON.stringify(credentialWrite).slice(0, 240));
+    /* Comparing the stored VALUE (not just "configured: true") is what proves the rollback did not rotate or
+       drop the credential: the digest is what goes into the evidence, the value stays in the throwaway home. */
+    const credentialPathBefore = join(home, ".credentials.yaml");
+    const credentialValueBefore = storedCredentialValue(await readFile(credentialPathBefore, "utf8"));
+    evidence.credentialRefDigestBeforeRollback = credentialValueBefore === null ? null : createHash("sha256").update(credentialValueBefore).digest("hex").slice(0, 12);
+    check("the harness can read back the stored test credential before the rollback", credentialValueBefore === "e2e-not-a-real-secret", evidence.credentialRefDigestBeforeRollback);
+    const patchBeforeRollback = await readPatch();
+    evidence.files.profilePatchBeforeRollback = patchBeforeRollback;
+    check("the unrelated setting and the saved override live side by side before the rollback", patchBeforeRollback.includes("- id: session-log-deepseek") && patchBeforeRollback.includes("- id: ui-settings"), patchBeforeRollback.replace(/\n/g, " | ").slice(0, 400));
+    /* The replacement is not necessarily the only layer in the list: an operator can add another bundle while
+       it is active. The undo has to take our composition out and leave that layer exactly where it was, which is
+       why the harness installs one here through the same documented CLI path. */
+    const unrelatedDir = join(root, "unrelated-layer");
+    await mkdir(unrelatedDir, { recursive: true });
+    await writeFile(join(unrelatedDir, "package.json"), JSON.stringify({ name: UNRELATED_LAYER, version: "0.0.0", private: true, dsh: { bundle: { patch: ["./cordis.patch.yml"] } } }, null, 2) + "\n");
+    await writeFile(join(unrelatedDir, "cordis.patch.yml"), "[]\n");
+    const unrelatedPack = execFileSync("npm", ["pack", "--pack-destination", join(root, "artifacts"), "--silent"], { cwd: unrelatedDir, encoding: "utf8" }).trim().split("\n").pop();
+    execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", "proto", "add", join(root, "artifacts", unrelatedPack)], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8" });
+    const bundlesWithUnrelated = (await readJson(join(profileDir, "package.json"))).dsh.profile.bundles;
+    evidence.bundlesWithUnrelatedLayer = bundlesWithUnrelated;
+    check("the harness added an unrelated bundle layer while the replacement was active", bundlesWithUnrelated.includes(UNRELATED_LAYER) && bundlesWithUnrelated.includes(OVERLAY_SCOPE + "/web-composition"), JSON.stringify(bundlesWithUnrelated));
+    const rollback = runTool(OVERLAY_TOOL, ["rollback", "--home", home, "--profile", "proto"]);
+    evidence.rollbackOutput = rollback.output.trim().split("\n");
+    check("the documented terminal rollback succeeds", rollback.code === 0, evidence.rollbackOutput.slice(-3).join(" | ").slice(0, 320));
+    const patchAfterRollback = await readPatch();
+    evidence.files.profilePatchAfterRollback = patchAfterRollback;
+    const overrideBlock = patchRow(patchAfterRollback, "ui-settings");
+    check("the rollback rewrites ONLY the name guard of its own override, back to the upstream provider", overrideBlock.includes('name: "@deepseek-ai/dsh-client-ui-settings"'), overrideBlock.replace(/\n/g, " | ").slice(0, 240));
+    check("the rollback keeps the saved value instead of restoring an old configuration snapshot", overrideBlock.includes("enabled: false"), overrideBlock.replace(/\n/g, " | ").slice(0, 240));
+    const ordinaryBlock = patchRow(patchAfterRollback, "session-log-deepseek");
+    check("the unrelated setting written during the replacement survives the rollback", ordinaryBlock.includes('name: "@deepseek-ai/dsh-session-log-deepseek"') && ordinaryBlock.includes("enabled: false"), ordinaryBlock.replace(/\n/g, " | ").slice(0, 240));
+    const manifestAfterRollback = await readJson(join(profileDir, "package.json"));
+    evidence.profileManifestAfterRollback = manifestAfterRollback;
+    const bundlesAfterRollback = manifestAfterRollback.dsh.profile.bundles;
+    check("the rollback puts the upstream roster back in the place its own composition occupied", JSON.stringify(bundlesAfterRollback) === JSON.stringify(["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", UNRELATED_LAYER]), JSON.stringify(bundlesAfterRollback));
+    check("the rollback undoes its own selection only: an unrelated bundle layer added during the replacement is kept", bundlesAfterRollback.includes(UNRELATED_LAYER), JSON.stringify(bundlesAfterRollback));
+    check("the rollback leaves the installed packages alone (only the selection is reverted)", Boolean(manifestAfterRollback.dependencies[FORK_PACKAGE] && manifestAfterRollback.dependencies[OVERLAY_SCOPE + "/web-composition"]), JSON.stringify(manifestAfterRollback.dependencies));
     discontinue("instance restart");
     instance.child.kill("SIGTERM");
     await sleep(3000);
     instance = await startInstance(home, "proto");
-    await navigate(instance.url);
-    await waitFor(cdp, SHELL_PROBE, "app shell on loopback after rollback");
-    await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-09-after-rollback.png"));
+    const rolled = new URL(instance.url);
+    const remoteUrl3 = "http://" + TEST_HOST + ":" + rolled.port + "/" + rolled.search;
+    evidence.urls.remoteAfterRollback = remoteUrl3;
+    await navigate(remoteUrl3);
+    await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after rollback", 60000);
+    await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-09-remote-after-rollback.png"));
     const rolledBack = JSON.parse(await cdp.eval(SWITCH_PROBE));
     evidence.switchAfterRollback = rolledBack;
-    check("after the documented rollback the saved value is still in effect (the override was not lost)", rolledBack.state === "false", JSON.stringify(rolledBack));
+    const patchAfterRollbackRestart = await readPatch();
+    evidence.files.profilePatchAfterRollbackRestart = patchAfterRollbackRestart;
+    check("the restart after the rollback leaves the saved override exactly where the rollback put it", patchAfterRollbackRestart === patchAfterRollback, patchAfterRollbackRestart.replace(/\n/g, " | ").slice(0, 240));
+    /* The upstream provider keeps its settings state in the page on a remote origin: the control composition
+       behaves identically (true on first open, false after a local flip, true again on the next load), so the
+       stored override is no longer read here. That IS the original remote restriction coming back. */
+    check("after the rollback the remote page ignores the stored override (the original remote restriction is back)", rolledBack.state === "true", JSON.stringify(rolledBack));
     const bootAfterRollback = JSON.parse(await cdp.eval(MODULE_PROBE));
     evidence.bootModulesAfterRollback = bootAfterRollback;
     const providersAfterRollback = loadedProviders(bootAfterRollback);
     evidence.bootProvidersAfterRollback = providersAfterRollback;
     check("after the rollback the page loads exactly one settings provider module again, the upstream package", providersAfterRollback.length === 1 && providersAfterRollback[0] === "@deepseek-ai/dsh-client-ui-settings", JSON.stringify(providersAfterRollback) + " of " + bootAfterRollback.entryCount + " modules");
+    /* The original remote restriction has to be back after the restart: the same remote page may still flip
+       its own switch, but the instance must no longer accept that as a stored value - the flip stays in the
+       page, the saved override is untouched, and the flip is gone after the next load. */
+    const rolledClick = await cdp.eval(SWITCH_CLICK);
+    await sleep(3500);
+    const patchAfterRolledClick = await readPatch();
+    evidence.files.profilePatchAfterRolledClick = patchAfterRolledClick;
+    const afterRolledClick = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    evidence.switchAfterRollbackClick = afterRolledClick;
+    check("the remote page after the rollback keeps its toggle in the page only (no stored value)", rolledClick === "CLICKED" && afterRolledClick.state === "false" && patchAfterRolledClick === patchAfterRollback, rolledClick + " " + JSON.stringify(afterRolledClick).slice(0, 200));
+    discontinue("remote restriction reload");
+    await reload();
+    await sleep(7000);
+    await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-12-remote-restriction-back.png"));
+    const afterRolledReload = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    evidence.switchAfterRollbackReload = afterRolledReload;
+    const patchAfterRolledReload = await readPatch();
+    evidence.files.profilePatchAfterRolledReload = patchAfterRolledReload;
+    check("the remote restriction is really back: the flipped value is gone after a refresh and nothing was stored", afterRolledReload.state === "true" && patchAfterRolledReload === patchAfterRollback, JSON.stringify(afterRolledReload).slice(0, 240));
+    const credentialDescribe = await rpcFor(rolled)("credentials/describe", { refs: [TEST_CREDENTIAL_REF] });
+    evidence.credentialDescribeAfterRollback = credentialDescribe;
+    const credentialEntry = credentialDescribe.ok === true && credentialDescribe.value ? credentialDescribe.value[TEST_CREDENTIAL_REF] : undefined;
+    check("the test credential survives the rollback, reported as configured and never in plaintext", Boolean(credentialEntry) && credentialEntry.configured === true && !JSON.stringify(credentialDescribe).includes("e2e-not-a-real-secret"), JSON.stringify(credentialDescribe).slice(0, 240));
+    const credentialPath = join(home, ".credentials.yaml");
+    const credentialFile = await readFile(credentialPath, "utf8");
+    const credentialMode = statSync(credentialPath).mode & 0o777;
+    const credentialValueAfter = storedCredentialValue(credentialFile);
+    const credentialDigestAfter = credentialValueAfter === null ? null : createHash("sha256").update(credentialValueAfter).digest("hex").slice(0, 12);
+    evidence.credentialsFile = { path: credentialPath, mode: credentialMode.toString(8), holdsRef: credentialFile.includes(TEST_CREDENTIAL_REF), refDigest: credentialDigestAfter };
+    check("the credential file itself is untouched and still owner-only", credentialFile.includes(TEST_CREDENTIAL_REF) && credentialMode === 0o600, "mode " + credentialMode.toString(8));
+    check("the stored credential VALUE is the same one the replacement saw (it was not rotated, dropped or replaced)", credentialValueAfter !== null && credentialDigestAfter === evidence.credentialRefDigestBeforeRollback, credentialDigestAfter + " vs " + evidence.credentialRefDigestBeforeRollback);
     assertLiveTransport("afterRollback");
     assertNoStageErrors("afterRollback", true);
   }
@@ -865,6 +1158,9 @@ async function main() {
   chrome.kill("SIGKILL");
   instance.child.kill("SIGTERM");
   await sleep(1500);
+  /* The hard-link copies of the installation are temporary scaffolding this harness created; they never hold
+     anything the run needs afterwards, so they are removed even when the evidence is kept. */
+  await rm(COPY_BASE, { recursive: true, force: true });
   if (!KEEP) await rm(root, { recursive: true, force: true });
   const failed = results.filter((r) => !r.ok);
   evidence.passed = results.length - failed.length;
@@ -876,4 +1172,14 @@ async function main() {
   process.exit(failed.length === 0 ? 0 : 1);
 }
 
-main().catch(async (error) => { console.error("HARNESS ERROR:", error); console.error(JSON.stringify(evidence, null, 2).slice(0, 2000)); process.exit(2); });
+main().catch(async (error) => {
+  console.error("HARNESS ERROR:", error);
+  console.error(JSON.stringify(evidence, null, 2).slice(0, 2000));
+  /* A harness error still leaves the observations behind: without them the failing stage cannot be read. */
+  try {
+    evidence.harnessError = String(error && error.stack ? error.stack : error);
+    await writeFile(join(EVIDENCE_DIR, MODE + "-evidence.json"), JSON.stringify(evidence, null, 2) + "\n");
+    console.error("partial evidence: " + join(EVIDENCE_DIR, MODE + "-evidence.json"));
+  } catch (writeError) { console.error("could not write partial evidence:", writeError.message); }
+  process.exit(2);
+});
