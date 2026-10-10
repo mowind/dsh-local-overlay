@@ -505,7 +505,7 @@ async function main() {
      authority the page is using cannot be waved through just because the harness disrupted that authority
      earlier in this same stage. */
   const errorCodeOf = (text) => { const match = /net::ERR_[A-Z_]+/.exec(String(text)); return match === null ? "" : match[0]; };
-  const isStreamLogEcho = (event, tolerated) => {
+  const isStreamLogEcho = (event, tolerated, discontinuedInStage) => {
     if (event.method !== "Log.entryAdded") return "";
     const entry = event.params.entry;
     if (entry.source !== "network") return "";
@@ -515,9 +515,17 @@ async function main() {
     if (target === "" || !isStreamTarget(target)) return "";
     const authority = authorityOf(target);
     if (authority === "" || authority === pageAuthority) return "";
-    const matched = tolerated.filter((item) => item.event.method === "Network.loadingFailed" && isStreamTarget(item.event.url) && authorityOf(item.event.url) === authority && errorCodeOf(item.event.text) === code);
-    if (matched.length === 0) return "";
-    return "network Log echo of the " + code + " teardown this stage already tolerated on " + authority;
+    const endpoint = streamPath(target);
+    /* The echo must belong to the SAME endpoint, not merely to the same authority: otherwise a failure of one
+       stream endpoint could buy an exemption for another one (a /plugins/events error covering a settings-mux
+       error). Two things can make the echo legitimate, and only two: a teardown of that very endpoint this
+       stage already tolerated, or a connection on that endpoint + authority that the harness itself
+       discontinued in this stage. The second case is needed because Chromium reports a failed WebSocket
+       HANDSHAKE only as a network Log entry - there is no loadingFailed event for it to pair with. */
+    const matchedTeardown = tolerated.filter((item) => item.event.method === "Network.loadingFailed" && isStreamTarget(item.event.url) && authorityOf(item.event.url) === authority && streamPath(item.event.url) === endpoint && errorCodeOf(item.event.text) === code);
+    const matchedDiscontinued = [...discontinuedInStage.values()].filter((meta) => authorityOf(meta.url) === authority && streamPath(meta.url) === endpoint);
+    if (matchedTeardown.length === 0 && matchedDiscontinued.length === 0) return "";
+    return "network Log echo of the " + code + " failure on " + endpoint + " at " + authority + " (" + (matchedTeardown.length > 0 ? "the same endpoint was already tolerated in this stage" : "the harness itself discontinued this endpoint in this stage") + ")";
   };
   /* allowStreamTeardown is true only for stages in which the harness itself navigates, goes offline or restarts the instance. */
   /* The harness itself takes the page offline, so its own probes MUST fail. Those failures are required
@@ -578,7 +586,7 @@ async function main() {
       }
       for (const event of events) {
         if (tolerated.some((item) => item.event === event)) continue;
-        const echo = isStreamLogEcho(event, tolerated);
+        const echo = isStreamLogEcho(event, tolerated, discontinuedInStage);
         if (echo !== "") tolerated.push({ event, reason: echo });
       }
     }
@@ -727,8 +735,12 @@ async function main() {
       settingsWritesAfterRecovery: settingsWritesAfterRecovery.map((entry) => ({ seq: entry.seq, rpcId: entry.rpcId, ns: entry.ns, enabledOps: entry.enabledOps, expectedRevision: entry.expectedRevision })),
     };
     check("no frame traffic after the recovery point on the connections the harness severed (they are never used again)", oldUsedAfterRecovery.length === 0, JSON.stringify(oldUsedAfterRecovery));
-    const roundTripWrites = settingsWritesAfterRecovery.map((entry) => entry.enabledOps.join(",")).join("|");
-    check("the two post-recovery writes reached the Host as parsed settings/mutate RPCs on ui-settings (enabled true, then false) after the recovery point", roundTripWrites === "true|false", JSON.stringify({ roundTripWrites, settingsWritesAfterRecovery, apiRequestsAfterRecovery: apiAfterRecovery.length }));
+    /* The two writes have to be recognised by SHAPE, not by stringifying whatever arrived: each RPC must carry
+       exactly one op on the single path ["enabled"], and the two values must really be the JSON booleans true
+       then false - a string "true" or a two-op batch is not the round trip this stage claims. */
+    const enabledOf = (entry) => entry.enabledOps.length !== 1 ? "invalid" : entry.enabledOps[0] === true ? "on" : entry.enabledOps[0] === false ? "off" : "invalid";
+    const roundTripWrites = settingsWritesAfterRecovery.map(enabledOf).join("|");
+    check("the two post-recovery writes reached the Host as parsed settings/mutate RPCs on ui-settings (enabled true, then false) after the recovery point", settingsWritesAfterRecovery.length === 2 && roundTripWrites === "on|off", JSON.stringify({ roundTripWrites, settingsWritesAfterRecovery, apiRequestsAfterRecovery: apiAfterRecovery.length }));
     check("the recovered settings socket carried frames after the recovery point (activity, not just creation)", newMuxFramesAfterRecovery > 0, JSON.stringify({ newMuxFramesAfterRecovery, newMuxConnections }));
   }
   assertLiveTransport("afterReconnect");
