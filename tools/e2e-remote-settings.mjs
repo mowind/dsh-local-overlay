@@ -28,6 +28,7 @@ const streamPath = (value) => {
 };
 const isStreamTarget = (value) => STREAM_PATH.test(streamPath(value));
 const authorityOf = (url) => { try { return new URL(url).host; } catch (error) { return ""; } };
+const pathnameOf = (url) => { try { return new URL(url).pathname; } catch (error) { return ""; } };
 
 function resolveDshBin() {
   if (process.env.DSH_BIN) return process.env.DSH_BIN;
@@ -50,7 +51,7 @@ const evidence = { mode: MODE, dshBin: DSH_BIN, dshInstall: DSH_INSTALL, chromiu
 
 class Cdp {
   constructor(ws) {
-    this.ws = ws; this.seq = 0; this.pending = new Map(); this.events = []; this.requestUrls = new Map();
+    this.ws = ws; this.seq = 0; this.pending = new Map(); this.events = []; this.requestUrls = new Map(); this.requests = [];
     /* requestId -> { url, kind, createdSeq, closedSeq } for the streaming transports only */
     this.connections = new Map(); this.eventSeq = 0;
     ws.onmessage = (e) => this.onMessage(e);
@@ -65,7 +66,12 @@ class Cdp {
   }
   track(msg) {
     const params = msg.params || {};
-    if (msg.method === "Network.requestWillBeSent" && params.request) this.requestUrls.set(params.requestId, params.request.url);
+    if (msg.method === "Network.requestWillBeSent" && params.request) {
+      this.requestUrls.set(params.requestId, params.request.url);
+      /* Every HTTP request the page makes, with its body: the settings write is an /api RPC, so the
+         recovery assertion has to see the write itself, not merely "some /api traffic". */
+      this.requests.push({ seq: msg.seq, requestId: params.requestId, url: params.request.url, method: params.request.method, postData: params.request.postData === undefined ? "" : params.request.postData });
+    }
     if (params.requestId === undefined) return;
     if (msg.method === "Network.webSocketCreated") this.connections.set(params.requestId, { url: params.url, kind: "WebSocket", createdSeq: msg.seq, closedSeq: null });
     else if (msg.method === "Network.requestWillBeSent" && params.type === "EventSource") this.connections.set(params.requestId, { url: params.request.url, kind: "EventSource", createdSeq: msg.seq, closedSeq: null });
@@ -75,6 +81,8 @@ class Cdp {
         const key = msg.method === "Network.webSocketFrameSent" ? "framesSent" : "framesReceived";
         connection[key] = (connection[key] || 0) + 1;
         connection.lastFrameSeq = msg.seq;
+        if (connection.frameSeqs === undefined) connection.frameSeqs = [];
+        connection.frameSeqs.push(msg.seq);
       }
     }
     else if (msg.method === "Network.webSocketHandshakeResponseReceived") {
@@ -85,6 +93,12 @@ class Cdp {
       const connection = this.connections.get(params.requestId);
       if (connection !== undefined && connection.closedSeq === null) connection.closedSeq = msg.seq;
     }
+  }
+  /* Frames this connection carried AFTER a sequence point. The cumulative counter cannot prove anything about
+     the post-recovery window: a socket can be created before the page is online again. */
+  framesAfter(connection, sinceSeq) {
+    const state = this.connections.get(connection.requestId);
+    return state === undefined || state.frameSeqs === undefined ? 0 : state.frameSeqs.filter((seq) => seq > sinceSeq).length;
   }
   /* Every streaming connection the browser currently holds open. */
   liveConnections() { return [...this.connections.entries()].filter(([, c]) => c.closedSeq === null && isStreamTarget(c.url)).map(([requestId, c]) => ({ requestId, url: c.url, kind: c.kind, createdSeq: c.createdSeq, handshake: c.handshake === undefined ? null : c.handshake, framesSent: c.framesSent || 0, framesReceived: c.framesReceived || 0, lastFrameSeq: c.lastFrameSeq === undefined ? null : c.lastFrameSeq })); }
@@ -483,17 +497,27 @@ async function main() {
     if (reasons.length === 0) return "";
     return "the harness itself disrupted this authority in this stage (" + [...new Set(reasons)].join(", ") + ")";
   };
-  /* The browser echoes a failed transport through the network Log too. That echo is accepted only when the
-     SAME stage already produced a tolerated teardown on the same authority, so it can never stand alone. */
-  const isStreamLogEcho = (event, tornAuthorities) => {
+  /* The browser echoes a failed transport through the network Log too, and a Log entry carries no request ID.
+     So the echo has to be matched against a teardown this stage ALREADY tolerated: the same authority, a
+     stream endpoint, and the SAME network error code as that tolerated failure. It can therefore never stand
+     alone, and it can never re-open a failure class the loadingFailed path rejects: the page's CURRENT
+     authority is excluded here exactly as it is there, so a transport that is broken right now on the
+     authority the page is using cannot be waved through just because the harness disrupted that authority
+     earlier in this same stage. */
+  const errorCodeOf = (text) => { const match = /net::ERR_[A-Z_]+/.exec(String(text)); return match === null ? "" : match[0]; };
+  const isStreamLogEcho = (event, tolerated) => {
     if (event.method !== "Log.entryAdded") return "";
     const entry = event.params.entry;
     if (entry.source !== "network") return "";
-    if (!/net::ERR_/.test(String(entry.text))) return "";
+    const code = errorCodeOf(entry.text);
+    if (code === "") return "";
     const target = isStreamTarget(event.url) ? event.url : quotedUrl(entry.text);
     if (target === "" || !isStreamTarget(target)) return "";
-    if (!tornAuthorities.has(authorityOf(target))) return "";
-    return "network Log echo of a teardown already tolerated on " + authorityOf(target);
+    const authority = authorityOf(target);
+    if (authority === "" || authority === pageAuthority) return "";
+    const matched = tolerated.filter((item) => item.event.method === "Network.loadingFailed" && isStreamTarget(item.event.url) && authorityOf(item.event.url) === authority && errorCodeOf(item.event.text) === code);
+    if (matched.length === 0) return "";
+    return "network Log echo of the " + code + " teardown this stage already tolerated on " + authority;
   };
   /* allowStreamTeardown is true only for stages in which the harness itself navigates, goes offline or restarts the instance. */
   /* The harness itself takes the page offline, so its own probes MUST fail. Those failures are required
@@ -552,10 +576,9 @@ async function main() {
         const reason = isDiscontinuedTeardown(event, discontinuedInStage) || isDisruptedStreamFailure(event, discontinuedInStage);
         if (reason !== "") tolerated.push({ event, reason });
       }
-      const tornAuthorities = new Set(tolerated.map((item) => authorityOf(item.event.url)));
       for (const event of events) {
         if (tolerated.some((item) => item.event === event)) continue;
-        const echo = isStreamLogEcho(event, tornAuthorities);
+        const echo = isStreamLogEcho(event, tolerated);
         if (echo !== "") tolerated.push({ event, reason: echo });
       }
     }
@@ -669,17 +692,44 @@ async function main() {
     };
     check("the recovered transport still writes the setting through to the instance Host", roundTripOn === "CLICKED" && /enabled:\s*true/.test(patchRoundTripOn) && stateRoundTripOn.state === "true", JSON.stringify({ click: roundTripOn, patch: patchRoundTripOn.slice(0, 240) }));
     check("reverting the setting rewrites the stored YAML to exactly its former text", roundTripBack === "CLICKED" && patchRoundTripBack === patchBeforeRoundTrip && stateRoundTripBack.state === "false", JSON.stringify({ clickBack: roundTripBack, sameText: patchRoundTripBack === patchBeforeRoundTrip, state: stateRoundTripBack.state }));
-    /* Binding the writes to the NEW connection: the connections the harness severed must carry no further
-       traffic, and the write must have crossed a transport at all (frames on the new socket, or /api requests
-       after the recovery point). A reconnect that only re-established an unrelated stream would still leave
-       the settings RPC on the old socket - and that is exactly what the first assertion catches. */
+    /* Binding the writes to the NEW connection, in two separate claims: (a) the connections the harness
+       severed must carry no frame after the recovery point, so a zombie socket cannot be reported as the
+       transport in use; (b) the writes themselves have to appear as parsed settings/mutate RPCs after the
+       recovery point. The settings RPC travels over HTTP /api, NOT inside the mux WebSocket, so (b) is the
+       proof that the write really happened after recovery while (a) is the proof that it did not ride the
+       socket the harness took away. */
     const muxAfterRoundTrip = cdp.liveConnections().filter((connection) => connection.kind === "WebSocket" && /\/api\/remote\.mux/.test(connection.url));
-    const oldUsedAfterRecovery = preReconnect.filter((connection) => { const state = cdp.connections.get(connection.requestId); return state !== undefined && state.lastFrameSeq !== undefined && state.lastFrameSeq > recoverySeq; });
-    const newMuxFrames = muxAfterRoundTrip.filter((connection) => !preReconnectIds.has(connection.requestId)).reduce((sum, connection) => sum + connection.framesSent + connection.framesReceived, 0);
-    const apiAfterRecovery = cdp.events.filter((event) => event.seq > recoverySeq && event.method === "Network.requestWillBeSent" && /\/api\//.test((event.params.request && event.params.request.url) || ""));
-    evidence.reconnect.roundTripTraffic = { recoverySeq, oldUsedAfterRecovery, newMuxFrames, apiRequestsAfterRecovery: apiAfterRecovery.length, muxAfterRoundTrip };
-    check("no traffic is carried on the connections the harness severed (they are never used again after recovery)", oldUsedAfterRecovery.length === 0, JSON.stringify(oldUsedAfterRecovery));
-    check("the post-recovery settings writes really crossed the transport (traffic observed after the recovery point)", newMuxFrames > 0 || apiAfterRecovery.length > 0, JSON.stringify({ newMuxFrames, apiRequestsAfterRecovery: apiAfterRecovery.length }));
+    /* Per-connection frame counts AFTER the recovery point (cdp.framesAfter), not the cumulative counters: a
+       socket can be created before the page is back online, so its totals cannot prove post-recovery use. */
+    const oldUsedAfterRecovery = preReconnect.filter((connection) => cdp.framesAfter(connection, recoverySeq) > 0);
+    const newMuxConnections = muxAfterRoundTrip.filter((connection) => !preReconnectIds.has(connection.requestId));
+    const newMuxFramesAfterRecovery = newMuxConnections.reduce((sum, connection) => sum + cdp.framesAfter(connection, recoverySeq), 0);
+    /* The write itself: the settings page calls the Host RPC settings/mutate over the /api transport, so this
+       does not look for "some /api traffic" (the fail-open the round-3 review named) but parses the RPC:
+       POST, pathname exactly /api/settings/mutate, envelope method settings/mutate, namespace ui-settings,
+       and the enabled paths the two clicks wrote. A poll or a catalog request cannot stand in for it. */
+    const apiAfterRecovery = cdp.requests.filter((request) => request.seq > recoverySeq && pathnameOf(request.url).startsWith("/api/"));
+    const parseMutate = (request) => {
+      if (request.method !== "POST") return null;
+      if (pathnameOf(request.url) !== "/api/settings/mutate") return null;
+      let body = null;
+      try { body = JSON.parse(request.postData); } catch (error) { return null; }
+      if (body === null || body.method !== "settings/mutate") return null;
+      const args = body.payload === undefined ? undefined : body.payload.args;
+      if (args === undefined || args.ns !== "ui-settings" || !Array.isArray(args.ops)) return null;
+      const enabledOps = args.ops.filter((op) => op.op === "set" && Array.isArray(op.path) && op.path.length === 1 && op.path[0] === "enabled").map((op) => op.value);
+      return { seq: request.seq, rpcId: body.rpcId, ns: args.ns, expectedRevision: args.expectedRevision === undefined ? null : args.expectedRevision, enabledOps };
+    };
+    const settingsWritesAfterRecovery = apiAfterRecovery.map(parseMutate).filter((entry) => entry !== null);
+    evidence.reconnect.roundTripTraffic = {
+      recoverySeq, oldUsedAfterRecovery, newMuxFramesAfterRecovery, muxAfterRoundTrip,
+      apiRequestsAfterRecovery: apiAfterRecovery.map((request) => request.method + " " + request.url),
+      settingsWritesAfterRecovery: settingsWritesAfterRecovery.map((entry) => ({ seq: entry.seq, rpcId: entry.rpcId, ns: entry.ns, enabledOps: entry.enabledOps, expectedRevision: entry.expectedRevision })),
+    };
+    check("no frame traffic after the recovery point on the connections the harness severed (they are never used again)", oldUsedAfterRecovery.length === 0, JSON.stringify(oldUsedAfterRecovery));
+    const roundTripWrites = settingsWritesAfterRecovery.map((entry) => entry.enabledOps.join(",")).join("|");
+    check("the two post-recovery writes reached the Host as parsed settings/mutate RPCs on ui-settings (enabled true, then false) after the recovery point", roundTripWrites === "true|false", JSON.stringify({ roundTripWrites, settingsWritesAfterRecovery, apiRequestsAfterRecovery: apiAfterRecovery.length }));
+    check("the recovered settings socket carried frames after the recovery point (activity, not just creation)", newMuxFramesAfterRecovery > 0, JSON.stringify({ newMuxFramesAfterRecovery, newMuxConnections }));
   }
   assertLiveTransport("afterReconnect");
   assertNoStageErrors("afterReconnect", true, documentUrl, true);

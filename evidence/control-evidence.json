@@ -63,7 +63,7 @@
     {
       "name": "the page still holds a working settings transport (afterReload)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.180\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":657,\"handshake\":{\"status\":101,\"responseSeq\":673},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":721}]"
+      "detail": "[{\"requestId\":\"2200967.180\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":583,\"handshake\":{\"status\":101,\"responseSeq\":599},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":648}]"
     },
     {
       "name": "no runtime exceptions or console errors beyond the transport the harness itself tore down (afterReload)",
@@ -73,7 +73,7 @@
     {
       "name": "the document holds a live streaming connection before the interruption",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.82\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":354,\"handshake\":{\"status\":101,\"responseSeq\":370},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":421},{\"requestId\":\"2147842.88\",\"url\":\"http://dsh-proto.test:32773/plugins/events\",\"kind\":\"EventSource\",\"createdSeq\":360,\"handshake\":null,\"framesSent\":0,\"framesReceived\":0,\"lastFrameSeq\":null},{\"requestId\":\"2147842.180\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":657,\"handshake\":{\"status\":101,\"responseSeq\":673},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":721},{\"requestId\":\"2147842.186\",\"url\":\"http://dsh-proto.test:32773/plugins/events\",\"kind\":\"EventSource\",\"createdSeq\":663,\"handshake\":null,\"framesSent\":0,\"framesReceived\":0,\"lastFrameSeq\":null}]"
+      "detail": "[{\"requestId\":\"2200967.82\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":368,\"handshake\":{\"status\":101,\"responseSeq\":384},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":435},{\"requestId\":\"2200967.88\",\"url\":\"http://dsh-proto.test:43029/plugins/events\",\"kind\":\"EventSource\",\"createdSeq\":374,\"handshake\":null,\"framesSent\":0,\"framesReceived\":0,\"lastFrameSeq\":null},{\"requestId\":\"2200967.180\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":583,\"handshake\":{\"status\":101,\"responseSeq\":599},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":648},{\"requestId\":\"2200967.186\",\"url\":\"http://dsh-proto.test:43029/plugins/events\",\"kind\":\"EventSource\",\"createdSeq\":589,\"handshake\":null,\"framesSent\":0,\"framesReceived\":0,\"lastFrameSeq\":null}]"
     },
     {
       "name": "the harness can really take the page offline through CDP",
@@ -93,17 +93,17 @@
     {
       "name": "the page's transport recovers without a reload (same document)",
       "ok": true,
-      "detail": "{\"afterOnline\":\"status:200\",\"docMark\":\"mark-lf4wrlef95s\",\"docMarkAfter\":\"mark-lf4wrlef95s\"}"
+      "detail": "{\"afterOnline\":\"status:200\",\"docMark\":\"mark-rqzipjhjjhi\",\"docMarkAfter\":\"mark-rqzipjhjjhi\"}"
     },
     {
       "name": "the recovered document re-establishes a NEW streaming connection (the old one is not reused)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.199\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":764,\"handshake\":{\"status\":101,\"responseSeq\":767},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":809}]"
+      "detail": "[{\"requestId\":\"2200967.199\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":690,\"handshake\":{\"status\":101,\"responseSeq\":693},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":739}]"
     },
     {
       "name": "the recovered transport is a NEW settings WebSocket whose handshake really succeeded (101), not a merely attempted or unrelated stream",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.199\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":764,\"handshake\":{\"status\":101,\"responseSeq\":767},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":809}]"
+      "detail": "[{\"requestId\":\"2200967.199\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":690,\"handshake\":{\"status\":101,\"responseSeq\":693},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":739}]"
     },
     {
       "name": "CONTROL: the page-local flip is still page-local after a transport interruption",
@@ -113,17 +113,17 @@
     {
       "name": "the page still holds a working settings transport (afterReconnect)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.199\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":764,\"handshake\":{\"status\":101,\"responseSeq\":767},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":809}]"
+      "detail": "[{\"requestId\":\"2200967.199\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":690,\"handshake\":{\"status\":101,\"responseSeq\":693},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":739}]"
     },
     {
       "name": "the induced offline probe really failed at the network layer (afterReconnect)",
       "ok": true,
-      "detail": "[\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791623734996.816,\\\"lineNumber\\\":0,\",\"Network.loadingFailed {\\\"requestId\\\":\\\"2147842.198\\\",\\\"timestamp\\\":957175.490845,\\\"type\\\":\\\"Fetch\\\",\\\"errorText\\\":\\\"net::ERR_INTERNET_DISCONNECTED\\\",\\\"canceled\\\":false}\",\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791623734998.849,\\\"url\\\":\\\"http://dsh-proto.test:32773/\\\",\\\"networkRequestId\\\":\\\"2147842.198\\\"}}\"]"
+      "detail": "[\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791624489792.048,\\\"lineNumber\\\":0,\",\"Network.loadingFailed {\\\"requestId\\\":\\\"2200967.198\\\",\\\"timestamp\\\":957930.287239,\\\"type\\\":\\\"Fetch\\\",\\\"errorText\\\":\\\"net::ERR_INTERNET_DISCONNECTED\\\",\\\"canceled\\\":false}\",\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791624489795.245,\\\"url\\\":\\\"http://dsh-proto.test:43029/\\\",\\\"networkRequestId\\\":\\\"2200967.198\\\"}}\"]"
     },
     {
       "name": "the forced offline window really breaks the page's settings transport, not just the document request (afterReconnect)",
       "ok": true,
-      "detail": "[\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791623734996.816,\\\"lineNumber\\\":0,\"]"
+      "detail": "[\"Log.entryAdded {\\\"entry\\\":{\\\"source\\\":\\\"network\\\",\\\"level\\\":\\\"error\\\",\\\"text\\\":\\\"WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\\\",\\\"timestamp\\\":1791624489792.048,\\\"lineNumber\\\":0,\"]"
     },
     {
       "name": "no runtime exceptions or console errors beyond the transport the harness itself tore down (afterReconnect)",
@@ -133,7 +133,7 @@
     {
       "name": "the page still holds a working settings transport (afterReconnectQuiescent)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147842.199\",\"url\":\"ws://dsh-proto.test:32773/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":764,\"handshake\":{\"status\":101,\"responseSeq\":767},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":809}]"
+      "detail": "[{\"requestId\":\"2200967.199\",\"url\":\"ws://dsh-proto.test:43029/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":690,\"handshake\":{\"status\":101,\"responseSeq\":693},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":739}]"
     },
     {
       "name": "no console exceptions, failures or protocol errors (afterReconnectQuiescent)",
@@ -158,7 +158,7 @@
     {
       "name": "the page still holds a working settings transport (afterLoopbackAccess)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2147858.196\",\"url\":\"ws://127.0.0.1:45965/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":1797,\"handshake\":{\"status\":101,\"responseSeq\":1814},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":1894}]"
+      "detail": "[{\"requestId\":\"2200983.196\",\"url\":\"ws://127.0.0.1:40125/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":1686,\"handshake\":{\"status\":101,\"responseSeq\":1704},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":1784}]"
     },
     {
       "name": "no runtime exceptions or console errors beyond the transport the harness itself tore down (afterLoopbackAccess)",
@@ -173,7 +173,7 @@
     {
       "name": "the page still holds a working settings transport (afterRestart)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2150090.82\",\"url\":\"ws://dsh-proto.test:45965/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":2392,\"handshake\":{\"status\":101,\"responseSeq\":2409},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":2465}]"
+      "detail": "[{\"requestId\":\"2203619.82\",\"url\":\"ws://dsh-proto.test:40125/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":2187,\"handshake\":{\"status\":101,\"responseSeq\":2204},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":2260}]"
     },
     {
       "name": "no runtime exceptions or console errors beyond the transport the harness itself tore down (afterRestart)",
@@ -258,12 +258,12 @@
     {
       "name": "auth: the token-minted cookie is bound to the trusted authority and presented in the cookie-bearing probes",
       "ok": true,
-      "detail": "[\"dsh-auth-hdjU2zxpRG1WbDDcuxCVT-n925nK3yWrPRMY8O93mtM=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0NTk2NSIsImlzc3VlZEF0IjoxNzkxNjIzNzY1NDA3LCJleHBpcmVzQXQiOjE3OTQyMTU3NjU0MDd9.ibbyP3n_KPvgYfdLPdWRPwBHp-me2KHByZM9BXyVeIo; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:16:05 GMT; HttpOnly; SameSite=Strict\"]"
+      "detail": "[\"dsh-auth-Bmd4ofqhy71BQ6wIKI6H-iqR7DDHLAqIhZWO6lRr7Og=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0MDEyNSIsImlzc3VlZEF0IjoxNzkxNjI0NTE5OTMzLCJleHBpcmVzQXQiOjE3OTQyMTY1MTk5MzN9.VPBhslTy1kFadqG9ZRppj47HxbkIII7by_3yERgZ5_w; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:28:39 GMT; HttpOnly; SameSite=Strict\"]"
     },
     {
       "name": "auth: the root token mints the authority-bound cookie and redirects",
       "ok": true,
-      "detail": "{\"status\":303,\"location\":\"./\",\"setCookie\":true,\"cookies\":[\"dsh-auth-hdjU2zxpRG1WbDDcuxCVT-n925nK3yWrPRMY8O93mtM=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0NTk2NSIsImlzc3VlZEF0IjoxNzkxNjIzNzY1NDA3LCJleHBpcmVzQXQiOjE3OTQyMTU3NjU0MDd9.ibbyP3n_KPvgYfdLPdWRPwBHp-me2KHByZM9BXyVeIo; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:16:05 GMT; HttpOnly; SameSite=Strict\"],\"body\":\"\"}"
+      "detail": "{\"status\":303,\"location\":\"./\",\"setCookie\":true,\"cookies\":[\"dsh-auth-Bmd4ofqhy71BQ6wIKI6H-iqR7DDHLAqIhZWO6lRr7Og=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0MDEyNSIsImlzc3VlZEF0IjoxNzkxNjI0NTE5OTMzLCJleHBpcmVzQXQiOjE3OTQyMTY1MTk5MzN9.VPBhslTy1kFadqG9ZRppj47HxbkIII7by_3yERgZ5_w; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:28:39 GMT; HttpOnly; SameSite=Strict\"],\"body\":\"\"}"
     },
     {
       "name": "auth: the document without a token is unauthorized",
@@ -273,7 +273,7 @@
     {
       "name": "the page still holds a working settings transport (atEnd)",
       "ok": true,
-      "detail": "[{\"requestId\":\"2150090.82\",\"url\":\"ws://dsh-proto.test:45965/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":2392,\"handshake\":{\"status\":101,\"responseSeq\":2409},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":2465}]"
+      "detail": "[{\"requestId\":\"2203619.82\",\"url\":\"ws://dsh-proto.test:40125/api/remote.mux\",\"kind\":\"WebSocket\",\"createdSeq\":2187,\"handshake\":{\"status\":101,\"responseSeq\":2204},\"framesSent\":3,\"framesReceived\":3,\"lastFrameSeq\":2260}]"
     },
     {
       "name": "no console exceptions, failures or protocol errors (atEnd)",
@@ -287,7 +287,7 @@
     "profilePatchAfterLoopbackToggle": "- id: ui-settings\n  name: \"@deepseek-ai/dsh-client-ui-settings\"\n  config:\n    enabled: false\n",
     "profilePatchAfterRestart": "- id: ui-settings\n  name: \"@deepseek-ai/dsh-client-ui-settings\"\n  config:\n    enabled: false\n"
   },
-  "root": "/tmp/dsh-e2e-control-lGAX3B",
+  "root": "/tmp/dsh-e2e-control-t7McX6",
   "loadedSettingsRows": [
     {
       "bundle": "@deepseek-ai/dsh-web-app",
@@ -297,12 +297,12 @@
     }
   ],
   "urls": {
-    "loopback": "http://127.0.0.1:32773/?token=V5zN3p8k9IbgrygDSv9M6SL84j4eAtqAugpaE8mMUls",
-    "remote": "http://dsh-proto.test:32773/?token=V5zN3p8k9IbgrygDSv9M6SL84j4eAtqAugpaE8mMUls",
-    "remoteAfterRestart": "http://dsh-proto.test:45965/?token=Ya6ceLAtONiznZl1-REsNUAWVn8F5mMkKF145OiFh5Q"
+    "loopback": "http://127.0.0.1:43029/?token=b_t0xqVHQFUDpv0MxxLmvbdKVqdSwNNwl9libGcAKQA",
+    "remote": "http://dsh-proto.test:43029/?token=b_t0xqVHQFUDpv0MxxLmvbdKVqdSwNNwl9libGcAKQA",
+    "remoteAfterRestart": "http://dsh-proto.test:40125/?token=rvKozW6WCF1tBCKNMir0sVdQ2GXsXwEIRsj2AWHMWpw"
   },
-  "documentUrl": "http://dsh-proto.test:32773/",
-  "serverStartLog": "dsh web: http://127.0.0.1:32773/?token=V5zN3p8k9IbgrygDSv9M6SL84j4eAtqAugpaE8mMUls\n",
+  "documentUrl": "http://dsh-proto.test:43029/",
+  "serverStartLog": "dsh web: http://127.0.0.1:43029/?token=b_t0xqVHQFUDpv0MxxLmvbdKVqdSwNNwl9libGcAKQA\n",
   "remoteHostEditorEntry": {
     "count": 0,
     "bodyHasLabel": false
@@ -419,14 +419,14 @@
   "tolerated_onInitialLoad": [],
   "discontinued_reload": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     }
   ],
   "switchAfterReload": {
@@ -447,77 +447,77 @@
   },
   "liveTransport_afterReload": [
     {
-      "requestId": "2147842.180",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux",
+      "requestId": "2200967.180",
+      "url": "ws://dsh-proto.test:43029/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 657,
+      "createdSeq": 583,
       "handshake": {
         "status": 101,
-        "responseSeq": 673
+        "responseSeq": 599
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 721
+      "lastFrameSeq": 648
     }
   ],
   "console_afterReload": [],
   "discontinuedConnections_afterReload": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "reason": "reload",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "reason": "reload",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     }
   ],
   "tolerated_afterReload": [],
   "reconnect": {
-    "docMarkBefore": "mark-lf4wrlef95s",
+    "docMarkBefore": "mark-rqzipjhjjhi",
     "connectionsBefore": [
       {
-        "requestId": "2147842.82",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.82",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 354,
+        "createdSeq": 368,
         "handshake": {
           "status": 101,
-          "responseSeq": 370
+          "responseSeq": 384
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 421
+        "lastFrameSeq": 435
       },
       {
-        "requestId": "2147842.88",
-        "url": "http://dsh-proto.test:32773/plugins/events",
+        "requestId": "2200967.88",
+        "url": "http://dsh-proto.test:43029/plugins/events",
         "kind": "EventSource",
-        "createdSeq": 360,
+        "createdSeq": 374,
         "handshake": null,
         "framesSent": 0,
         "framesReceived": 0,
         "lastFrameSeq": null
       },
       {
-        "requestId": "2147842.180",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.180",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 657,
+        "createdSeq": 583,
         "handshake": {
           "status": 101,
-          "responseSeq": 673
+          "responseSeq": 599
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 721
+        "lastFrameSeq": 648
       },
       {
-        "requestId": "2147842.186",
-        "url": "http://dsh-proto.test:32773/plugins/events",
+        "requestId": "2200967.186",
+        "url": "http://dsh-proto.test:43029/plugins/events",
         "kind": "EventSource",
-        "createdSeq": 663,
+        "createdSeq": 589,
         "handshake": null,
         "framesSent": 0,
         "framesReceived": 0,
@@ -529,106 +529,106 @@
     "transportWhileOffline": "failed",
     "whileOffline": "rejected:TypeError: Failed to fetch",
     "afterOnline": "status:200",
-    "docMarkAfter": "mark-lf4wrlef95s",
+    "docMarkAfter": "mark-rqzipjhjjhi",
     "connectionsAfter": [
       {
-        "requestId": "2147842.82",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.82",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 354,
+        "createdSeq": 368,
         "handshake": {
           "status": 101,
-          "responseSeq": 370
+          "responseSeq": 384
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 421
+        "lastFrameSeq": 435
       },
       {
-        "requestId": "2147842.88",
-        "url": "http://dsh-proto.test:32773/plugins/events",
+        "requestId": "2200967.88",
+        "url": "http://dsh-proto.test:43029/plugins/events",
         "kind": "EventSource",
-        "createdSeq": 360,
+        "createdSeq": 374,
         "handshake": null,
         "framesSent": 0,
         "framesReceived": 0,
         "lastFrameSeq": null
       },
       {
-        "requestId": "2147842.186",
-        "url": "http://dsh-proto.test:32773/plugins/events",
+        "requestId": "2200967.186",
+        "url": "http://dsh-proto.test:43029/plugins/events",
         "kind": "EventSource",
-        "createdSeq": 663,
+        "createdSeq": 589,
         "handshake": null,
         "framesSent": 0,
         "framesReceived": 0,
         "lastFrameSeq": null
       },
       {
-        "requestId": "2147842.199",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.199",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 764,
+        "createdSeq": 690,
         "handshake": {
           "status": 101,
-          "responseSeq": 767
+          "responseSeq": 693
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 809
+        "lastFrameSeq": 739
       }
     ],
     "recoveredConnections": [
       {
-        "requestId": "2147842.199",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.199",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 764,
+        "createdSeq": 690,
         "handshake": {
           "status": 101,
-          "responseSeq": 767
+          "responseSeq": 693
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 809
+        "lastFrameSeq": 739
       }
     ],
     "recoveredMux": [
       {
-        "requestId": "2147842.199",
-        "url": "ws://dsh-proto.test:32773/api/remote.mux",
+        "requestId": "2200967.199",
+        "url": "ws://dsh-proto.test:43029/api/remote.mux",
         "kind": "WebSocket",
-        "createdSeq": 764,
+        "createdSeq": 690,
         "handshake": {
           "status": 101,
-          "responseSeq": 767
+          "responseSeq": 693
         },
         "framesSent": 3,
         "framesReceived": 3,
-        "lastFrameSeq": 809
+        "lastFrameSeq": 739
       }
     ]
   },
   "discontinued_forced offline": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.180",
+      "requestId": "2200967.180",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     }
   ],
   "switchAfterReconnect": {
@@ -649,29 +649,29 @@
   },
   "liveTransport_afterReconnect": [
     {
-      "requestId": "2147842.199",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux",
+      "requestId": "2200967.199",
+      "url": "ws://dsh-proto.test:43029/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 764,
+      "createdSeq": 690,
       "handshake": {
         "status": 101,
-        "responseSeq": 767
+        "responseSeq": 693
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 809
+      "lastFrameSeq": 739
     }
   ],
   "console_afterReconnect": [
     {
-      "seq": 758,
+      "seq": 684,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
-          "timestamp": 1791623734996.816,
+          "text": "WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
+          "timestamp": 1791624489792.048,
           "lineNumber": 0,
           "stackTrace": {
             "callFrames": [
@@ -694,71 +694,71 @@
         }
       },
       "url": "",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734996.816,\"lineNumber\":0,"
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489792.048,\"lineNumber\":0,"
     },
     {
-      "seq": 761,
+      "seq": 687,
       "method": "Network.loadingFailed",
       "params": {
-        "requestId": "2147842.198",
-        "timestamp": 957175.490845,
+        "requestId": "2200967.198",
+        "timestamp": 957930.287239,
         "type": "Fetch",
         "errorText": "net::ERR_INTERNET_DISCONNECTED",
         "canceled": false
       },
-      "url": "http://dsh-proto.test:32773/",
-      "text": "Network.loadingFailed {\"requestId\":\"2147842.198\",\"timestamp\":957175.490845,\"type\":\"Fetch\",\"errorText\":\"net::ERR_INTERNET_DISCONNECTED\",\"canceled\":false}"
+      "url": "http://dsh-proto.test:43029/",
+      "text": "Network.loadingFailed {\"requestId\":\"2200967.198\",\"timestamp\":957930.287239,\"type\":\"Fetch\",\"errorText\":\"net::ERR_INTERNET_DISCONNECTED\",\"canceled\":false}"
     },
     {
-      "seq": 762,
+      "seq": 688,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
           "text": "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
-          "timestamp": 1791623734998.849,
-          "url": "http://dsh-proto.test:32773/",
-          "networkRequestId": "2147842.198"
+          "timestamp": 1791624489795.245,
+          "url": "http://dsh-proto.test:43029/",
+          "networkRequestId": "2200967.198"
         }
       },
-      "url": "http://dsh-proto.test:32773/",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734998.849,\"url\":\"http://dsh-proto.test:32773/\",\"networkRequestId\":\"2147842.198\"}}"
+      "url": "http://dsh-proto.test:43029/",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489795.245,\"url\":\"http://dsh-proto.test:43029/\",\"networkRequestId\":\"2200967.198\"}}"
     }
   ],
   "discontinuedConnections_afterReconnect": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "reason": "forced offline",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "reason": "forced offline",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.180",
+      "requestId": "2200967.180",
       "reason": "forced offline",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "reason": "forced offline",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     }
   ],
   "tolerated_afterReconnect": [],
   "inducedOffline_afterReconnect": [
     {
-      "seq": 758,
+      "seq": 684,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
-          "timestamp": 1791623734996.816,
+          "text": "WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
+          "timestamp": 1791624489792.048,
           "lineNumber": 0,
           "stackTrace": {
             "callFrames": [
@@ -781,48 +781,48 @@
         }
       },
       "url": "",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734996.816,\"lineNumber\":0,"
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489792.048,\"lineNumber\":0,"
     },
     {
-      "seq": 761,
+      "seq": 687,
       "method": "Network.loadingFailed",
       "params": {
-        "requestId": "2147842.198",
-        "timestamp": 957175.490845,
+        "requestId": "2200967.198",
+        "timestamp": 957930.287239,
         "type": "Fetch",
         "errorText": "net::ERR_INTERNET_DISCONNECTED",
         "canceled": false
       },
-      "url": "http://dsh-proto.test:32773/",
-      "text": "Network.loadingFailed {\"requestId\":\"2147842.198\",\"timestamp\":957175.490845,\"type\":\"Fetch\",\"errorText\":\"net::ERR_INTERNET_DISCONNECTED\",\"canceled\":false}"
+      "url": "http://dsh-proto.test:43029/",
+      "text": "Network.loadingFailed {\"requestId\":\"2200967.198\",\"timestamp\":957930.287239,\"type\":\"Fetch\",\"errorText\":\"net::ERR_INTERNET_DISCONNECTED\",\"canceled\":false}"
     },
     {
-      "seq": 762,
+      "seq": 688,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
           "text": "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
-          "timestamp": 1791623734998.849,
-          "url": "http://dsh-proto.test:32773/",
-          "networkRequestId": "2147842.198"
+          "timestamp": 1791624489795.245,
+          "url": "http://dsh-proto.test:43029/",
+          "networkRequestId": "2200967.198"
         }
       },
-      "url": "http://dsh-proto.test:32773/",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734998.849,\"url\":\"http://dsh-proto.test:32773/\",\"networkRequestId\":\"2147842.198\"}}"
+      "url": "http://dsh-proto.test:43029/",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489795.245,\"url\":\"http://dsh-proto.test:43029/\",\"networkRequestId\":\"2200967.198\"}}"
     }
   ],
   "inducedTransport_afterReconnect": [
     {
-      "seq": 758,
+      "seq": 684,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
-          "timestamp": 1791623734996.816,
+          "text": "WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED",
+          "timestamp": 1791624489792.048,
           "lineNumber": 0,
           "stackTrace": {
             "callFrames": [
@@ -845,22 +845,22 @@
         }
       },
       "url": "",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734996.816,\"lineNumber\":0,"
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://dsh-proto.test:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489792.048,\"lineNumber\":0,"
     }
   ],
   "liveTransport_afterReconnectQuiescent": [
     {
-      "requestId": "2147842.199",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux",
+      "requestId": "2200967.199",
+      "url": "ws://dsh-proto.test:43029/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 764,
+      "createdSeq": 690,
       "handshake": {
         "status": 101,
-        "responseSeq": 767
+        "responseSeq": 693
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 809
+      "lastFrameSeq": 739
     }
   ],
   "console_afterReconnectQuiescent": [],
@@ -868,74 +868,74 @@
   "tolerated_afterReconnectQuiescent": [],
   "discontinued_navigation": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.196",
+      "requestId": "2200983.196",
       "kind": "WebSocket",
-      "url": "ws://127.0.0.1:45965/api/remote.mux"
+      "url": "ws://127.0.0.1:40125/api/remote.mux"
     },
     {
-      "requestId": "2147858.203",
+      "requestId": "2200983.203",
       "kind": "EventSource",
-      "url": "http://127.0.0.1:45965/plugins/events"
+      "url": "http://127.0.0.1:40125/plugins/events"
     }
   ],
   "loopbackHostEditorEntry": {
@@ -966,34 +966,34 @@
   },
   "discontinued_instance restart": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "kind": "EventSource",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "kind": "WebSocket",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.82",
+      "requestId": "2200983.82",
       "kind": "WebSocket",
-      "url": "ws://127.0.0.1:32773/api/remote.mux"
+      "url": "ws://127.0.0.1:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.89",
+      "requestId": "2200983.89",
       "kind": "EventSource",
-      "url": "http://127.0.0.1:32773/plugins/events"
+      "url": "http://127.0.0.1:43029/plugins/events"
     }
   ],
   "switchLoopbackAfterRestart": {
@@ -1020,108 +1020,108 @@
   },
   "liveTransport_afterLoopbackAccess": [
     {
-      "requestId": "2147858.196",
-      "url": "ws://127.0.0.1:45965/api/remote.mux",
+      "requestId": "2200983.196",
+      "url": "ws://127.0.0.1:40125/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 1797,
+      "createdSeq": 1686,
       "handshake": {
         "status": 101,
-        "responseSeq": 1814
+        "responseSeq": 1704
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 1894
+      "lastFrameSeq": 1784
     }
   ],
   "console_afterLoopbackAccess": [
     {
-      "seq": 1357,
+      "seq": 1284,
       "method": "Network.loadingFailed",
       "params": {
-        "requestId": "2147858.89",
-        "timestamp": 957195.773865,
+        "requestId": "2200983.89",
+        "timestamp": 957950.591281,
         "type": "EventSource",
         "errorText": "net::ERR_INCOMPLETE_CHUNKED_ENCODING",
         "canceled": false
       },
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "text": "Network.loadingFailed {\"requestId\":\"2147858.89\",\"timestamp\":957195.773865,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "text": "Network.loadingFailed {\"requestId\":\"2200983.89\",\"timestamp\":957950.591281,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}"
     },
     {
-      "seq": 1358,
+      "seq": 1285,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
           "text": "Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING",
-          "timestamp": 1791623755281.873,
-          "url": "http://127.0.0.1:32773/plugins/events",
-          "networkRequestId": "2147858.89"
+          "timestamp": 1791624510099.298,
+          "url": "http://127.0.0.1:43029/plugins/events",
+          "networkRequestId": "2200983.89"
         }
       },
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791623755281.873,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.89\"}}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791624510099.298,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.89\"}}"
     },
     {
-      "seq": 1362,
+      "seq": 1290,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-          "timestamp": 1791623755559.482,
-          "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+          "text": "WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+          "timestamp": 1791624510398.946,
+          "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
           "lineNumber": 1401,
           "stackTrace": {
             "callFrames": [
               {
                 "functionName": "connect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1401,
                 "columnNumber": 19
               },
               {
                 "functionName": "maintain",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1500,
                 "columnNumber": 22
               },
               {
                 "functionName": "reconnect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1252,
                 "columnNumber": 33
               },
               {
                 "functionName": "onReconnectRequested",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 2505,
                 "columnNumber": 56
               },
               {
                 "functionName": "",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18971,
                 "columnNumber": 40
               },
               {
                 "functionName": "callSink",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 19037,
                 "columnNumber": 5
               },
               {
                 "functionName": "loop",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18970,
                 "columnNumber": 11
               }
@@ -1129,68 +1129,68 @@
           }
         }
       },
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623755559.482,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510398.946,\"url\":\"http://127.0.0.1"
     },
     {
-      "seq": 1367,
+      "seq": 1295,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-          "timestamp": 1791623756238.525,
-          "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+          "text": "WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+          "timestamp": 1791624510975.288,
+          "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
           "lineNumber": 1401,
           "stackTrace": {
             "callFrames": [
               {
                 "functionName": "connect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1401,
                 "columnNumber": 19
               },
               {
                 "functionName": "maintain",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1500,
                 "columnNumber": 22
               },
               {
                 "functionName": "reconnect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1252,
                 "columnNumber": 33
               },
               {
                 "functionName": "onReconnectRequested",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 2505,
                 "columnNumber": 56
               },
               {
                 "functionName": "",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18971,
                 "columnNumber": 40
               },
               {
                 "functionName": "callSink",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 19037,
                 "columnNumber": 5
               },
               {
                 "functionName": "loop",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18970,
                 "columnNumber": 11
               }
@@ -1198,68 +1198,68 @@
           }
         }
       },
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623756238.525,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510975.288,\"url\":\"http://127.0.0.1"
     },
     {
-      "seq": 1372,
+      "seq": 1300,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
-          "text": "WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-          "timestamp": 1791623757776.979,
-          "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+          "text": "WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+          "timestamp": 1791624512650.219,
+          "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
           "lineNumber": 1401,
           "stackTrace": {
             "callFrames": [
               {
                 "functionName": "connect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1401,
                 "columnNumber": 19
               },
               {
                 "functionName": "maintain",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1500,
                 "columnNumber": 22
               },
               {
                 "functionName": "reconnect",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 1252,
                 "columnNumber": 33
               },
               {
                 "functionName": "onReconnectRequested",
                 "scriptId": "6",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
                 "lineNumber": 2505,
                 "columnNumber": 56
               },
               {
                 "functionName": "",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18971,
                 "columnNumber": 40
               },
               {
                 "functionName": "callSink",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 19037,
                 "columnNumber": 5
               },
               {
                 "functionName": "loop",
-                "scriptId": "8",
-                "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
+                "scriptId": "7",
+                "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-file-upload/client.js,@deepseek-ai/dsh-api-remotes/client.js,@deepseek-ai/dsh-client-ui-deliverables/client.js,@deepseek-ai/dsh-typert-registry/client.js,@deepseek-ai/dsh-client-connection/client.js,@deepseek-ai/dsh-api-workspace-controller/client.js,@deepseek-ai/dsh-api-session-controller/client.js,@deepseek-ai/dsh-client-ui-directory-picker-browse/client.js&rev=e1f0fd608d88",
                 "lineNumber": 18970,
                 "columnNumber": 11
               }
@@ -1267,113 +1267,113 @@
           }
         }
       },
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623757776.979,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624512650.219,\"url\":\"http://127.0.0.1"
     },
     {
-      "seq": 1375,
+      "seq": 1303,
       "method": "Network.loadingFailed",
       "params": {
-        "requestId": "2147858.114",
-        "timestamp": 957198.77542,
+        "requestId": "2200983.114",
+        "timestamp": 957953.592642,
         "type": "EventSource",
         "errorText": "net::ERR_CONNECTION_REFUSED",
         "canceled": false
       },
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "text": "Network.loadingFailed {\"requestId\":\"2147858.114\",\"timestamp\":957198.77542,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "text": "Network.loadingFailed {\"requestId\":\"2200983.114\",\"timestamp\":957953.592642,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}"
     },
     {
-      "seq": 1376,
+      "seq": 1304,
       "method": "Log.entryAdded",
       "params": {
         "entry": {
           "source": "network",
           "level": "error",
           "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED",
-          "timestamp": 1791623758283.426,
-          "url": "http://127.0.0.1:32773/plugins/events",
-          "networkRequestId": "2147858.114"
+          "timestamp": 1791624513100.65,
+          "url": "http://127.0.0.1:43029/plugins/events",
+          "networkRequestId": "2200983.114"
         }
       },
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623758283.426,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.114\"}}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624513100.65,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.114\"}}"
     }
   ],
   "discontinuedConnections_afterLoopbackAccess": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "reason": "navigation",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "reason": "navigation",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "reason": "navigation",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "reason": "navigation",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.82",
+      "requestId": "2200983.82",
       "reason": "instance restart",
-      "url": "ws://127.0.0.1:32773/api/remote.mux"
+      "url": "ws://127.0.0.1:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.89",
+      "requestId": "2200983.89",
       "reason": "instance restart",
-      "url": "http://127.0.0.1:32773/plugins/events"
+      "url": "http://127.0.0.1:43029/plugins/events"
     }
   ],
   "tolerated_afterLoopbackAccess": [
     {
       "method": "Network.loadingFailed",
-      "url": "http://127.0.0.1:32773/plugins/events",
+      "url": "http://127.0.0.1:43029/plugins/events",
       "reason": "the harness discontinued this connection by its own action: instance restart",
-      "text": "Network.loadingFailed {\"requestId\":\"2147858.89\",\"timestamp\":957195.773865,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}"
+      "text": "Network.loadingFailed {\"requestId\":\"2200983.89\",\"timestamp\":957950.591281,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}"
     },
     {
       "method": "Network.loadingFailed",
-      "url": "http://127.0.0.1:32773/plugins/events",
+      "url": "http://127.0.0.1:43029/plugins/events",
       "reason": "the harness itself disrupted this authority in this stage (instance restart)",
-      "text": "Network.loadingFailed {\"requestId\":\"2147858.114\",\"timestamp\":957198.77542,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}"
+      "text": "Network.loadingFailed {\"requestId\":\"2200983.114\",\"timestamp\":957953.592642,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}"
     },
     {
       "method": "Log.entryAdded",
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "reason": "network Log echo of a teardown already tolerated on 127.0.0.1:32773",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791623755281.873,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.89\"}}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "reason": "network Log echo of the net::ERR_INCOMPLETE_CHUNKED_ENCODING teardown this stage already tolerated on 127.0.0.1:43029",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791624510099.298,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.89\"}}"
     },
     {
       "method": "Log.entryAdded",
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "reason": "network Log echo of a teardown already tolerated on 127.0.0.1:32773",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623755559.482,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "reason": "network Log echo of the net::ERR_CONNECTION_REFUSED teardown this stage already tolerated on 127.0.0.1:43029",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510398.946,\"url\":\"http://127.0.0.1"
     },
     {
       "method": "Log.entryAdded",
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "reason": "network Log echo of a teardown already tolerated on 127.0.0.1:32773",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623756238.525,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "reason": "network Log echo of the net::ERR_CONNECTION_REFUSED teardown this stage already tolerated on 127.0.0.1:43029",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510975.288,\"url\":\"http://127.0.0.1"
     },
     {
       "method": "Log.entryAdded",
-      "url": "http://127.0.0.1:32773/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
-      "reason": "network Log echo of a teardown already tolerated on 127.0.0.1:32773",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623757776.979,\"url\":\"http://127.0.0.1"
+      "url": "http://127.0.0.1:43029/plugins/??@deepseek-ai/dsh-client-ui-open-in-app/client.js,@deepseek-ai/dsh-api-gateway/client.js,@deepseek-ai/dsh-api-job-controller/client.js,@deepseek-ai/dsh-api-terminal-controller/client.js,@deepseek-ai/dsh-api-workspace-files/client.js,@deepseek-ai/dsh-client-ui-settings-account/client.js,@deepseek-ai/dsh-client-hmr/client.js,@deepseek-ai/dsh-cordis-client-runner/client.js,@deepseek-ai/dsh-client-ui-theme/client.js,@deepseek-ai/dsh-client-locale/client.js,@deepseek-ai/dsh-client-shortcuts/client.js,@deepseek-ai/dsh-client-ui-shortcuts/client.js,@deepseek-ai/dsh-client-ui-layout/client.js,@deepseek-ai/dsh-client-ui-renderer/client.js,@deepseek-ai/dsh-client-ui-session/client.js,@deepseek-ai/dsh-client-resources/client.js,@deepseek-ai/dsh-client-ui-sidebar/client.js,@deepseek-ai/dsh-client-ui-sidebar-right/client.js,@deepseek-ai/dsh-client-ui-sidebar-documentpreview/client.js,@deepseek-ai/dsh-client-ui-sidebar-terminal/client.js,@deepseek-ai/dsh-client-ui-sidebar-files/client.js,@deepseek-ai/dsh-client-ui-settings/client.js,@deepseek-ai/dsh-client-ui-settings-general/client.js,@deepseek-ai/dsh-client-ui-settings-models/client.js,@deepseek-ai/dsh-client-ui-plugin-manager/client.js,@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client.js,@deepseek-ai/dsh-client-ui-conversation/client.js,@deepseek-ai/dsh-client-ui-approval/client.js,@deepseek-ai/dsh-client-ui-chat/client.js,@deepseek-ai/dsh-client-ui-brand-official/client.js,@deepseek-ai/dsh-client-ui-attachment/client.js,@deepseek-ai/dsh-client-ui-tool/client.js,@deepseek-ai/dsh-client-ui-cordis/client.js,@deepseek-ai/dsh-client-ui-workspace/client.js,@deepseek-ai/dsh-client-ui-workflow-run/client.js,@deepseek-ai/dsh-client-ui-input-trigger/client.js,@deepseek-ai/dsh-client-ui-commands/client.js,@deepseek-ai/dsh-client-ui-skill/client.js,@deepseek-ai/dsh-client-ui-subagent/client.js,@deepseek-ai/dsh-client-ui-reference/client.js,@deepseek-ai/dsh-client-ui-jobs/client.js,@deepseek-ai/dsh-client-ui-schedule/client.js,@deepseek-ai/dsh-client-ui-goal/client.js,@deepseek-ai/dsh-client-ui-message-feedback/client.js,@deepseek-ai/dsh-client-ui-model-selection/client.js,@deepseek-ai/dsh-client-ui-permission-presets/client.js,@deepseek-ai/dsh-client-ui-agent-preset/client.js,@deepseek-ai/dsh-client-ui-settings-session-log/client.js,@deepseek-ai/dsh-client-ui-settings-plugins/client.js,@deepseek-ai/dsh-client-ui-settings-shell/client.js,@deepseek-ai/dsh-client-ui-settings-agent-loop/client.js,@deepseek-ai/dsh-client-ui-settings-subagent/client.js,@deepseek-ai/dsh-client-ui-settings-web-search/client.js,@deepseek-ai/dsh-client-ui-plan/client.js,@deepseek-ai/dsh-client-ui-user-questions/client.js,@deepseek-ai/dsh-client-ui-trajectory/client.js,@deepseek-ai/dsh-session-log-export/client.js&rev=0993c6cad432",
+      "reason": "network Log echo of the net::ERR_CONNECTION_REFUSED teardown this stage already tolerated on 127.0.0.1:43029",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624512650.219,\"url\":\"http://127.0.0.1"
     },
     {
       "method": "Log.entryAdded",
-      "url": "http://127.0.0.1:32773/plugins/events",
-      "reason": "network Log echo of a teardown already tolerated on 127.0.0.1:32773",
-      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623758283.426,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.114\"}}"
+      "url": "http://127.0.0.1:43029/plugins/events",
+      "reason": "network Log echo of the net::ERR_CONNECTION_REFUSED teardown this stage already tolerated on 127.0.0.1:43029",
+      "text": "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624513100.65,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.114\"}}"
     }
   ],
   "switchAfterRestart": {
@@ -1394,50 +1394,50 @@
   },
   "liveTransport_afterRestart": [
     {
-      "requestId": "2150090.82",
-      "url": "ws://dsh-proto.test:45965/api/remote.mux",
+      "requestId": "2203619.82",
+      "url": "ws://dsh-proto.test:40125/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 2392,
+      "createdSeq": 2187,
       "handshake": {
         "status": 101,
-        "responseSeq": 2409
+        "responseSeq": 2204
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 2465
+      "lastFrameSeq": 2260
     }
   ],
   "console_afterRestart": [],
   "discontinuedConnections_afterRestart": [
     {
-      "requestId": "2147842.82",
+      "requestId": "2200967.82",
       "reason": "navigation",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147842.88",
+      "requestId": "2200967.88",
       "reason": "navigation",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.186",
+      "requestId": "2200967.186",
       "reason": "navigation",
-      "url": "http://dsh-proto.test:32773/plugins/events"
+      "url": "http://dsh-proto.test:43029/plugins/events"
     },
     {
-      "requestId": "2147842.199",
+      "requestId": "2200967.199",
       "reason": "navigation",
-      "url": "ws://dsh-proto.test:32773/api/remote.mux"
+      "url": "ws://dsh-proto.test:43029/api/remote.mux"
     },
     {
-      "requestId": "2147858.196",
+      "requestId": "2200983.196",
       "reason": "navigation",
-      "url": "ws://127.0.0.1:45965/api/remote.mux"
+      "url": "ws://127.0.0.1:40125/api/remote.mux"
     },
     {
-      "requestId": "2147858.203",
+      "requestId": "2200983.203",
       "reason": "navigation",
-      "url": "http://127.0.0.1:45965/plugins/events"
+      "url": "http://127.0.0.1:40125/plugins/events"
     }
   ],
   "tolerated_afterRestart": [],
@@ -1448,7 +1448,7 @@
       "location": "./",
       "setCookie": true,
       "cookies": [
-        "dsh-auth-hdjU2zxpRG1WbDDcuxCVT-n925nK3yWrPRMY8O93mtM=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0NTk2NSIsImlzc3VlZEF0IjoxNzkxNjIzNzY1NDA3LCJleHBpcmVzQXQiOjE3OTQyMTU3NjU0MDd9.ibbyP3n_KPvgYfdLPdWRPwBHp-me2KHByZM9BXyVeIo; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:16:05 GMT; HttpOnly; SameSite=Strict"
+        "dsh-auth-Bmd4ofqhy71BQ6wIKI6H-iqR7DDHLAqIhZWO6lRr7Og=v1.eyJ2ZXJzaW9uIjoxLCJhdXRob3JpdHkiOiJkc2gtcHJvdG8udGVzdDo0MDEyNSIsImlzc3VlZEF0IjoxNzkxNjI0NTE5OTMzLCJleHBpcmVzQXQiOjE3OTQyMTY1MTk5MzN9.VPBhslTy1kFadqG9ZRppj47HxbkIII7by_3yERgZ5_w; Max-Age=2592000; Path=/; Expires=Mon, 09 Nov 2026 09:28:39 GMT; HttpOnly; SameSite=Strict"
       ],
       "body": ""
     },
@@ -1545,31 +1545,31 @@
   },
   "liveTransport_atEnd": [
     {
-      "requestId": "2150090.82",
-      "url": "ws://dsh-proto.test:45965/api/remote.mux",
+      "requestId": "2203619.82",
+      "url": "ws://dsh-proto.test:40125/api/remote.mux",
       "kind": "WebSocket",
-      "createdSeq": 2392,
+      "createdSeq": 2187,
       "handshake": {
         "status": 101,
-        "responseSeq": 2409
+        "responseSeq": 2204
       },
       "framesSent": 3,
       "framesReceived": 3,
-      "lastFrameSeq": 2465
+      "lastFrameSeq": 2260
     }
   ],
   "console_atEnd": [],
   "discontinuedConnections_atEnd": [],
   "tolerated_atEnd": [],
   "consoleFullTail": [
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791623734998.849,\"url\":\"http://dsh-proto.test:32773/\",\"networkRequestId\":\"2147842.198\"}}",
-    "Network.loadingFailed {\"requestId\":\"2147858.89\",\"timestamp\":957195.773865,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}",
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791623755281.873,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.89\"}}",
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623755559.482,\"url\":\"http://127.0.0.1",
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623756238.525,\"url\":\"http://127.0.0.1",
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:32773/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623757776.979,\"url\":\"http://127.0.0.1",
-    "Network.loadingFailed {\"requestId\":\"2147858.114\",\"timestamp\":957198.77542,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}",
-    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791623758283.426,\"url\":\"http://127.0.0.1:32773/plugins/events\",\"networkRequestId\":\"2147858.114\"}}"
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INTERNET_DISCONNECTED\",\"timestamp\":1791624489795.245,\"url\":\"http://dsh-proto.test:43029/\",\"networkRequestId\":\"2200967.198\"}}",
+    "Network.loadingFailed {\"requestId\":\"2200983.89\",\"timestamp\":957950.591281,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791624510099.298,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.89\"}}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510398.946,\"url\":\"http://127.0.0.1",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624510975.288,\"url\":\"http://127.0.0.1",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43029/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624512650.219,\"url\":\"http://127.0.0.1",
+    "Network.loadingFailed {\"requestId\":\"2200983.114\",\"timestamp\":957953.592642,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791624513100.65,\"url\":\"http://127.0.0.1:43029/plugins/events\",\"networkRequestId\":\"2200983.114\"}}"
   ],
   "consoleEventCount": 10,
   "settingsDialogText": "Preview Notice\n\nDeepSeek Harness 0.2 is still in preview, and many areas need continued improvement and refinement. We welcome feedback and suggestions from all developers and users. The new desktop app now targets a broad range of users, while developer-related advanced features can be enabled in the settings. DeepSeek Harness’s product features and plugin APIs are expected to continue rapid iteration and evolution, and will gradually stabilize over time.\n\nWe look forward to exploring the limits of intelligence together with users and developers around the world, building on open-source, reusable, and composable infrastructure. We welcome everyone to bring their ideas to life with DeepSeek Harness and participate in the community to enrich the plugin ecosystem.\n\nContinue\n===\nSettings\nGeneral\nModels\nBuilt-in plugins\nAgent presets\nClose\nLanguage\nEnglish\nAppearance\nLight\nDark\nSystem\nFont size\nOnly affects conversation content\n14\npx\nWork details\nChoose how much detail to show for tool calls\nDetailed\nWhen to Collapse Work Details\nChoose when to automatically collapse work details\nOn completion\nShow coding view\nShows trajectory, code diffs, and all Agent presets\nKeyboard shortcuts\n\nView and edit available shortcuts and input actions\n\nEdit shortcuts\nSend behavior while busy\nWhat Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior\nQueue\nPerformance & usage\nChoose how much performance and usage information to show\nDetailed\nCurrent version: 0.2.1-alpha.2",
