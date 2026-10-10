@@ -33,13 +33,14 @@
   "overlay": {
     "baselinePackage": "@deepseek-ai/dsh-client-ui-settings@0.2.1-alpha.2",
     "baselineCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
-    "provenance": "../../provenance.json"
+    "provenance": "provenance.json"
   },
   "files": [
     "lib/index.js",
     "lib/client.js",
     "lib/types/**/*.d.ts",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "provenance.json"
   ]
 }

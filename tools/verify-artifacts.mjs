@@ -8,12 +8,17 @@
  * installation that does not match the recorded baseline fails loudly instead
  * of silently serving an unverified copy.
  *
- * Usage: node tools/verify-artifacts.mjs [--install <dsh install dir>] [--quiet]
+ * It also pins what the two packages would actually publish: npm pack must
+ * contain exactly the recorded copies plus the files we authored, and each
+ * package must ship a provenance.json identical to the repository one.
+ *
+ * Usage: node tools/verify-artifacts.mjs [--install <dsh install dir>] [--provenance <file>] [--quiet]
  */
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +26,9 @@ const ROOT = dirname(HERE);
 const argv = process.argv.slice(2);
 const flag = (name) => { const i = argv.indexOf(name); return i === -1 ? undefined : argv[i + 1]; };
 const QUIET = argv.includes("--quiet");
+/* Authored files are the only ones allowed to be published without a recorded upstream counterpart. */
+const AUTHORED = ["package.json", "NOTICE", "provenance.json"];
+const PACKAGES = ["packages/dsh-client-ui-settings", "packages/dsh-web-composition"];
 
 function resolveInstall() {
   const explicit = flag("--install") ?? process.env.DSH_INSTALL;
@@ -39,9 +47,31 @@ function unifiedDiff(upstreamPath, localPath) {
   catch (error) { return typeof error.stdout === "string" ? error.stdout : ""; }
 }
 
+/* What npm pack would publish for one package, so an unrecorded extra file cannot slip into a tarball. */
+function firstJsonValue(text) {
+  const start = Math.min(...["{", "["].map((token) => { const i = text.indexOf(token); return i === -1 ? Number.POSITIVE_INFINITY : i; }));
+  const stack = []; let inString = false; let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) { if (escaped) escaped = false; else if (ch === "\\") escaped = true; else if (ch === "\"") inString = false; continue; }
+    if (ch === "\"") inString = true;
+    else if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}" || ch === "]") { stack.pop(); if (stack.length === 0) return text.slice(start, i + 1); }
+  }
+  throw new Error("npm pack --dry-run --json did not print JSON");
+}
+/* npm prints the tarball name around the JSON, and older npm prints an array while newer npm prints an object keyed by package name. */
+function listPacked(dir) {
+  const out = execFileSync("npm", ["pack", "--dry-run", "--json", "--pack-destination", tmpdir()], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const parsed = JSON.parse(firstJsonValue(out));
+  const record = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+  return record.files.map((file) => file.path).sort();
+}
+
 const problems = [];
 const rows = [];
-const provenance = JSON.parse(await readFile(join(ROOT, "provenance.json"), "utf8"));
+const PROVENANCE = resolve(flag("--provenance") ?? join(ROOT, "provenance.json"));
+const provenance = JSON.parse(await readFile(PROVENANCE, "utf8"));
 const install = resolveInstall();
 const installed = JSON.parse(await readFile(join(install, "package.json"), "utf8"));
 if (installed.version !== provenance.baseline.version) problems.push("baseline version mismatch: installed " + installed.name + "@" + installed.version + ", recorded " + provenance.baseline.version);
@@ -64,6 +94,19 @@ for (const entry of provenance.files) {
   } else if (localHash !== upstreamHash) issues.push("file is not byte-identical to the baseline copy");
   if (issues.length > 0) problems.push(entry.path + ": " + issues.join("; "));
   rows.push([entry.kind, entry.path, issues.length === 0 ? "ok" : "FAIL"]);
+}
+
+for (const dir of PACKAGES) {
+  const recorded = provenance.files.filter((entry) => entry.path.startsWith(dir + "/")).map((entry) => entry.path.slice(dir.length + 1));
+  const expected = [...recorded, ...AUTHORED].sort();
+  const packed = listPacked(join(ROOT, dir));
+  const missing = expected.filter((path) => !packed.includes(path));
+  const extra = packed.filter((path) => !expected.includes(path));
+  if (missing.length > 0) problems.push(dir + ": npm pack would not include the recorded file(s) " + missing.join(", "));
+  if (extra.length > 0) problems.push(dir + ": npm pack would include unrecorded file(s) " + extra.join(", "));
+  rows.push([missing.length + extra.length === 0 ? "ok" : "FAIL", "packed", dir + " (" + packed.length + " files)"]);
+  const shipped = sha256(await readFile(join(ROOT, dir, "provenance.json")));
+  if (shipped !== sha256(await readFile(PROVENANCE))) problems.push(dir + "/provenance.json differs from " + relative(ROOT, PROVENANCE));
 }
 
 if (!QUIET) {

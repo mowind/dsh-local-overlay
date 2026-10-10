@@ -4,9 +4,13 @@ upstream package.
 Upstream package: @deepseek-ai/dsh-web-app, version 0.2.1-alpha.2
 Upstream project: DeepSeek Harness, https://github.com/deepseek-ai/deepseek-harness
 Upstream license: MIT, Copyright (c) 2026 DeepSeek
-Upstream build identity: verified against DSH commit d743267388641bc76f17c45ce8b4c231aed1d32c
+Upstream build identity: declared candidate baseline commit d743267388641bc76f17c45ce8b4c231aed1d32c.
+The installation this copy was taken from carries no git metadata, so the commit is
+not independently verifiable from it; what tools/verify-artifacts.mjs does check
+locally is the installed package name/version, the per-file sha256 of every copy
+and the exact recorded diff of every modified file.
 
 Only one line differs from upstream: the settings provider row's package name in
 cordis.patch.yml, changed from '@deepseek-ai/dsh-client-ui-settings' to
 '@dsh-local-overlay/dsh-client-ui-settings'. The row id `ui-settings`, the Host
-config namespace and every other row are upstream content (see ../provenance.json).
+config namespace and every other row are upstream content (see provenance.json, shipped in this package).

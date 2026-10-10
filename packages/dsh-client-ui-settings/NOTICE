@@ -3,9 +3,13 @@ This package is a modified copy of an MIT-licensed upstream package.
 Upstream package: @deepseek-ai/dsh-client-ui-settings, version 0.2.1-alpha.2
 Upstream project: DeepSeek Harness, https://github.com/deepseek-ai/deepseek-harness
 Upstream license: MIT, Copyright (c) 2026 DeepSeek
-Upstream build identity: verified against DSH commit d743267388641bc76f17c45ce8b4c231aed1d32c
+Upstream build identity: declared candidate baseline commit d743267388641bc76f17c45ce8b4c231aed1d32c.
+The installation this copy was taken from carries no git metadata, so the commit is
+not independently verifiable from it; what tools/verify-artifacts.mjs does check
+locally is the installed package name/version, the per-file sha256 of every copy
+and the exact recorded diff of every modified file.
 
-Copied files (recorded hashes and the exact differing lines live in ../provenance.json):
+Copied files (recorded hashes and the exact differing lines live in provenance.json, shipped in this package):
   lib/index.js         verbatim copy
   lib/client.js        copy; the module registration id and the persistence
                        selection differ from upstream
