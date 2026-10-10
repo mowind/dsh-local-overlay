@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from "node:child_process";
 import { readFile, writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { cpSync, existsSync, realpathSync } from "node:fs";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,23 @@ const CHROMIUM = process.env.CHROMIUM || "/usr/sbin/chromium";
 const OVERLAY_SCOPE = "@dsh-local-overlay";
 const FORK_PACKAGE = OVERLAY_SCOPE + "/dsh-client-ui-settings";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/* The two server-push transports a loaded page holds open, and the authority of a transport URL.
+   Every console/network tolerance below is bound to a connection that already existed when the stage
+   started (or to its authority), never to a URL substring, so a transport that keeps failing on fresh
+   attempts after the disruption can never be tolerated. */
+/* The two streaming endpoints the app shell holds open. Matched on the exact pathname so a look-alike
+   path (/plugins/events-malicious) can never borrow the tolerance meant for the real transport. */
+const STREAM_PATH = /^\/(?:api\/remote\.mux|plugins\/events)$/;
+/* Works for absolute URLs and for the scheme-less 'host:port/path' text the browser Log quotes. */
+const streamPath = (value) => {
+  const text = String(value).split("?")[0].split("#")[0];
+  const scheme = text.indexOf("://");
+  const rest = scheme === -1 ? text : text.slice(scheme + 3);
+  const slash = rest.indexOf("/");
+  return slash === -1 ? "" : rest.slice(slash);
+};
+const isStreamTarget = (value) => STREAM_PATH.test(streamPath(value));
+const authorityOf = (url) => { try { return new URL(url).host; } catch (error) { return ""; } };
 
 function resolveDshBin() {
   if (process.env.DSH_BIN) return process.env.DSH_BIN;
@@ -32,12 +49,50 @@ const check = (name, ok, detail) => { results.push({ name, ok: ok === true, deta
 const evidence = { mode: MODE, dshBin: DSH_BIN, dshInstall: DSH_INSTALL, chromium: CHROMIUM, testHost: TEST_HOST, checks: results, files: {} };
 
 class Cdp {
-  constructor(ws) { this.ws = ws; this.seq = 0; this.pending = new Map(); this.events = []; this.requestUrls = new Map(); ws.onmessage = (e) => this.onMessage(e); }
+  constructor(ws) {
+    this.ws = ws; this.seq = 0; this.pending = new Map(); this.events = []; this.requestUrls = new Map();
+    /* requestId -> { url, kind, createdSeq, closedSeq } for the streaming transports only */
+    this.connections = new Map(); this.eventSeq = 0;
+    ws.onmessage = (e) => this.onMessage(e);
+  }
   static async connect(url) { const ws = new WebSocket(url); await new Promise((res, rej) => { ws.onopen = () => res(); ws.onerror = () => rej(new Error("ws connect failed: " + url)); }); return new Cdp(ws); }
-  onMessage(e) { const msg = JSON.parse(typeof e.data === "string" ? e.data : e.data.toString()); if (msg.id !== undefined) { const p = this.pending.get(msg.id); if (p) { this.pending.delete(msg.id); msg.error ? p.rej(new Error(JSON.stringify(msg.error))) : p.res(msg.result); } return; } if (msg.method === "Network.requestWillBeSent" && msg.params.request) this.requestUrls.set(msg.params.requestId, msg.params.request.url); this.events.push(msg); }
+  onMessage(e) {
+    const msg = JSON.parse(typeof e.data === "string" ? e.data : e.data.toString());
+    if (msg.id !== undefined) { const p = this.pending.get(msg.id); if (p) { this.pending.delete(msg.id); msg.error ? p.rej(new Error(JSON.stringify(msg.error))) : p.res(msg.result); } return; }
+    msg.seq = ++this.eventSeq;
+    this.track(msg);
+    this.events.push(msg);
+  }
+  track(msg) {
+    const params = msg.params || {};
+    if (msg.method === "Network.requestWillBeSent" && params.request) this.requestUrls.set(params.requestId, params.request.url);
+    if (params.requestId === undefined) return;
+    if (msg.method === "Network.webSocketCreated") this.connections.set(params.requestId, { url: params.url, kind: "WebSocket", createdSeq: msg.seq, closedSeq: null });
+    else if (msg.method === "Network.requestWillBeSent" && params.type === "EventSource") this.connections.set(params.requestId, { url: params.request.url, kind: "EventSource", createdSeq: msg.seq, closedSeq: null });
+    else if (msg.method === "Network.webSocketClosed" || msg.method === "Network.loadingFailed" || msg.method === "Network.loadingFinished") {
+      const connection = this.connections.get(params.requestId);
+      if (connection !== undefined && connection.closedSeq === null) connection.closedSeq = msg.seq;
+    }
+  }
+  /* Every streaming connection the browser currently holds open. */
+  liveConnections() { return [...this.connections.entries()].filter(([, c]) => c.closedSeq === null && isStreamTarget(c.url)).map(([requestId, c]) => ({ requestId, url: c.url, kind: c.kind, createdSeq: c.createdSeq })); }
+  /* Every teardown the browser reported for a streaming connection after the given sequence number. This is
+     the outside observation that a connection really ended, not an inference from a failed fetch. */
+  teardownEvents(sinceSeq) {
+    const out = [];
+    for (const event of this.events) {
+      if (event.seq <= sinceSeq) continue;
+      if (event.method !== "Network.webSocketClosed" && event.method !== "Network.loadingFailed" && event.method !== "Network.loadingFinished") continue;
+      const connection = this.connections.get(event.params.requestId);
+      if (connection === undefined || !isStreamTarget(connection.url)) continue;
+      out.push({ seq: event.seq, method: event.method, requestId: event.params.requestId, url: connection.url, kind: connection.kind, type: event.params.type, errorText: event.params.errorText });
+    }
+    return out;
+  }
+
   send(method, params = {}) { const id = ++this.seq; return new Promise((res, rej) => { this.pending.set(id, { res, rej }); this.ws.send(JSON.stringify({ id, method, params })); }); }
   async eval(expression) { const r = await this.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error("eval failed: " + JSON.stringify((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text)); return r.result.value; }
-  errorEvents() { return this.events.filter((e) => e.method === "Runtime.exceptionThrown" || (e.method === "Log.entryAdded" && e.params.entry.level === "error") || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error") || e.method === "Network.loadingFailed").map((e) => ({ method: e.method, params: e.params, url: (e.method === "Network.loadingFailed" ? (this.requestUrls.get(e.params.requestId) || "") : (e.params.entry && e.params.entry.url) || ""), text: e.method + " " + JSON.stringify(e.params).slice(0, 240) })); }
+  errorEvents() { return this.events.filter((e) => e.method === "Runtime.exceptionThrown" || (e.method === "Log.entryAdded" && e.params.entry.level === "error") || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error") || e.method === "Network.loadingFailed").map((e) => ({ seq: e.seq, method: e.method, params: e.params, url: (e.method === "Network.loadingFailed" ? (this.requestUrls.get(e.params.requestId) || "") : (e.params.entry && e.params.entry.url) || ""), text: e.method + " " + JSON.stringify(e.params).slice(0, 240) })); }
   errors() { return this.errorEvents().map((e) => e.text); }
   screenshot(path) { return this.send("Page.captureScreenshot", { format: "png" }).then((s) => writeFile(path, Buffer.from(s.data, "base64"))); }
 }
@@ -98,6 +153,24 @@ async function fetchRaw(url, headers) {
   });
 }
 
+/* A WebSocket handshake on the REAL transport endpoint held by the fence. The upgrade attempt is answered by
+   the fence itself, and `upgraded` records whether the socket was ever switched to the WebSocket protocol, so
+   a rejection cannot be confused with a transport failure. This probe runs from Node, outside the page. */
+async function upgradeProbe(port, authority, cookie) {
+  return await new Promise((resolve) => {
+    const headers = { host: authority, connection: "Upgrade", upgrade: "websocket", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==", "sec-websocket-version": "13" };
+    if (cookie) headers.cookie = cookie;
+    const req = http.request({ host: "127.0.0.1", port, path: "/api/remote.mux", method: "GET", headers, timeout: 8000 });
+    let settled = false;
+    const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+    req.on("upgrade", (res) => { done({ status: res.statusCode, upgraded: true }); req.destroy(); });
+    req.on("response", (res) => { res.resume(); done({ status: res.statusCode, upgraded: false }); });
+    req.on("error", (error) => done({ status: 0, upgraded: false, body: String(error.message) }));
+    req.on("timeout", () => { req.destroy(); done({ status: 0, upgraded: false, body: "timeout" }); });
+    req.end();
+  });
+}
+
 /* The loaded composition layers are the only source of client plugin rows, so counting every ui-settings
    row across every patch file declared by every loaded bundle is what proves there is exactly ONE settings
    provider in the running instance (a both-loaded misconfiguration would show up as two rows here). */
@@ -154,9 +227,14 @@ async function fenceProbes(port, token) {
     evilHostWithCookie: await fetchRaw(api, { host: "evil.test:" + port, ...authenticated }),
     loopbackWithCookie: await fetchRaw(api, { host: "127.0.0.1:" + port, ...authenticated }),
     evilOriginOnly: await fetchRaw(api, { host: authority, origin: "https://evil.test" }),
+    evilOriginWithCookie: await fetchRaw(api, { host: authority, origin: "https://evil.test", ...authenticated }),
     fetchSiteOnly: await fetchRaw(api, { host: authority, "sec-fetch-site": "cross-site" }),
+    fetchSiteWithCookie: await fetchRaw(api, { host: authority, "sec-fetch-site": "cross-site", ...authenticated }),
     evilOriginAndFetchSite: await fetchRaw(api, { host: authority, origin: "https://evil.test", "sec-fetch-site": "cross-site" }),
-    sameOrigin: await fetchRaw(api, { host: authority, origin: "http://" + authority })
+    sameOrigin: await fetchRaw(api, { host: authority, origin: "http://" + authority }),
+    upgradeEvilHost: await upgradeProbe(port, "evil.test:" + port, ""),
+    upgradeTrustedNoCookie: await upgradeProbe(port, authority, ""),
+    upgradeTrustedWithCookie: await upgradeProbe(port, authority, cookie)
   };
 }
 
@@ -198,6 +276,22 @@ async function main() {
     try { execFileSync(process.execPath, [join(REPO_ROOT, "tools/verify-artifacts.mjs"), "--quiet", "--install", DSH_INSTALL, "--provenance", corruptPath], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
     catch (error) { refused = true; refusal = String(error.stdout || "") + String(error.stderr || ""); }
     check("an incompatible build record is refused by the preflight (deliberately corrupted hash)", refused && /local file changed since it was recorded/.test(refusal), refusal.trim().split("\n").slice(-2).join(" | "));
+    /* Second negative control for the same gate: the recorded build must pin the manifest itself, not only
+       the copied files, so a manifest whose bundle-patch sequence was reordered has to be refused. */
+    const negativeDir = join(root, "verify-negative");
+    cpSync(REPO_ROOT, negativeDir, { recursive: true, filter: (source) => !source.includes("node_modules") && !source.includes(".git") });
+    const negativeManifestPath = join(negativeDir, "packages/dsh-web-composition/package.json");
+    const negativeManifest = JSON.parse(await readFile(negativeManifestPath, "utf8"));
+    const reordered = negativeManifest.dsh.bundle.patch.slice();
+    reordered.unshift(reordered.pop());
+    negativeManifest.dsh.bundle.patch = reordered;
+    await writeFile(negativeManifestPath, JSON.stringify(negativeManifest, null, 2) + "\n");
+    let reorderRefused = false;
+    let reorderRefusal = "";
+    try { execFileSync(process.execPath, [join(negativeDir, "tools/verify-artifacts.mjs"), "--quiet", "--install", DSH_INSTALL], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
+    catch (error) { reorderRefused = true; reorderRefusal = String(error.stdout || "") + String(error.stderr || ""); }
+    evidence.negativeReorder = { refused: reorderRefused, output: reorderRefusal.trim().split("\n").slice(-3) };
+    check("a reordered bundle-patch manifest is refused too (the record pins the manifest, not just the files)", reorderRefused && /changed since it was recorded|patch sequence/.test(reorderRefusal), reorderRefusal.trim().split("\n").slice(-2).join(" | "));
     const buildDir = join(root, "artifacts");
     await mkdir(buildDir, { recursive: true });
     const packs = [];
@@ -207,13 +301,22 @@ async function main() {
     }
     evidence.artifacts = packs;
     check("real packaged artifacts built (npm pack)", packs.length === 2 && packs.every((p) => existsSync(p)), packs.join(", "));
+    /* The loaded bundle list is reset to base-only before each add, so what the CLI does to it is visible. */
+    const bundlesAfterEachAdd = [];
     for (const pack of packs) {
       const manifestBefore = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
       manifestBefore.dsh = { profile: { bundles: ["@deepseek-ai/dsh-base"] } };
       await writeFile(join(profileDir, "package.json"), JSON.stringify(manifestBefore, null, 2) + "\n");
       try { execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", "proto", "add", pack], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }); }
       catch (error) { check("dsh plugin add " + pack, false, String(error.stdout || "").slice(-400) + String(error.stderr || "").slice(-400)); }
+      const manifestAfterAdd = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
+      bundlesAfterEachAdd.push({ pack: pack.split("/").pop(), bundles: (manifestAfterAdd.dsh && manifestAfterAdd.dsh.profile && manifestAfterAdd.dsh.profile.bundles) || [] });
     }
+    evidence.bundlesAfterEachAdd = bundlesAfterEachAdd;
+    /* Measured CLI behaviour: adding a plain component only installs it, while adding a composition package
+       rewrites dsh.profile.bundles itself. That is why the provenance gate has to run BEFORE this loop. */
+    check("adding the component package leaves the loaded bundle list untouched", JSON.stringify(bundlesAfterEachAdd[0].bundles) === JSON.stringify(["@deepseek-ai/dsh-base"]), JSON.stringify(bundlesAfterEachAdd[0]));
+    check("adding the composition package switches the loaded bundle list by itself (the gate must precede it)", JSON.stringify(bundlesAfterEachAdd[1].bundles) === JSON.stringify(["@deepseek-ai/dsh-base", OVERLAY_SCOPE + "/web-composition"]), JSON.stringify(bundlesAfterEachAdd[1]));
     const manifestPath = join(profileDir, "package.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     evidence.profileManifestAfterAdd = manifest;
@@ -292,71 +395,128 @@ async function main() {
   }
 
   let stageMark = 0;
+  /* The connections the harness itself deliberately discontinued. Every disruptive action it takes (a
+     navigation, a reload, the forced offline window, a SIGTERM restart) records the streaming connections
+     that were live at that moment, and only those exact request IDs may be tolerated - inside that stage
+     only. A transport that stays broken for a whole stage opens NEW requests, which never enter this set, so
+     a permanently failing transport cannot be waved through by naming the right endpoint. */
+  let discontinued = new Map();
+  const discontinue = (reason) => {
+    const marked = [];
+    for (const connection of cdp.liveConnections()) {
+      discontinued.set(connection.requestId, { reason, url: connection.url });
+      marked.push({ requestId: connection.requestId, kind: connection.kind, url: connection.url });
+    }
+    evidence["discontinued_" + reason] = (evidence["discontinued_" + reason] || []).concat(marked);
+    return marked;
+  };
+  const navigate = async (url) => { discontinue("navigation"); await cdp.send("Page.navigate", { url }).catch(() => {}); };
+  const reload = async () => { discontinue("reload"); await cdp.send("Page.reload").catch(() => {}); };
   const stageEvents = () => cdp.errorEvents().slice(stageMark);
   /* Classification is structural, never text-based:
      - Runtime.exceptionThrown and Runtime.consoleAPICalled (type error) are failures at EVERY stage, in both
        modes, whatever their message says. A message that merely mentions net::ERR_* cannot buy an exemption.
-     - A failure is tolerated only for the two streaming transports the previous document was holding when the
-       harness itself tore that document down (Page.navigate, Page.reload, the offline window, SIGTERM + restart):
-       EventSource/WebSocket on /plugins/events or /api/remote.mux, plus the browser Log echo of that same URL.
-     - Script, Stylesheet, Document, Image, Fetch, XHR and every other loadingFailed type are failures everywhere,
-       including inside a forced window.
+     - A streaming failure is tolerated only when its request ID is one the harness discontinued by its own
+       action, and only in the stage that took that action. Script, Stylesheet, Document, Image, Fetch, XHR and
+       every other loadingFailed type are failures everywhere, including inside a forced window.
      - The initial load tolerates nothing at all: it asserts zero error events of any kind.
      The same stream-teardown noise appears in control mode against the untouched original composition, so it is
-     baseline transport behaviour, not an overlay effect; it is recorded as tolerated_<stage> for inspection. */
-  const STREAM_TARGET = /\/plugins\/events|\/api\/remote\.mux/;
+     baseline transport behaviour, not an overlay effect; every tolerated event is recorded in tolerated_<stage>
+     together with the reason that let it through, and the discontinued set is recorded per stage. */
   /* The browser reports a failed transport twice: Network.loadingFailed carries the request URL, and the
      console echo carries the failing URL inside its message text. The echo is tolerated only when its
      `source` field says the NETWORK STACK produced it (page JavaScript reports as "javascript" or
      "console-api" and is therefore never tolerated), the URL quoted in the message matches a transport
      endpoint, and the message carries a real net::ERR_ code. */
   const quotedUrl = (text) => {
-    const match = /'(wss?|https?):\/\/([^']+)'/.exec(String(text));
-    return match === null ? "" : match[2];
+    const match = /'(wss?|https?):\/\/[^']+'/.exec(String(text));
+    return match === null ? "" : match[0].slice(1, -1);
   };
-  const isStreamTeardown = (event) => {
-    if (event.method === "Network.loadingFailed") {
-      return STREAM_TARGET.test(event.url) && (event.params.type === "EventSource" || event.params.type === "WebSocket");
-    }
-    if (event.method === "Log.entryAdded") {
-      const entry = event.params.entry;
-      if (entry.source !== "network") return false;
-      if (!/net::ERR_/.test(String(entry.text))) return false;
-      /* entry.url is the failing resource for ordinary requests; a failed WebSocket is only named inside
-         the message text, so that quoted URL is used for those. */
-      const target = STREAM_TARGET.test(event.url) ? event.url : quotedUrl(entry.text);
-      return target !== "" && STREAM_TARGET.test(target);
-    }
-    return false;
+  /* A connection the harness itself discontinued, failing on a real transport endpoint. */
+  const isDiscontinuedTeardown = (event, discontinuedInStage) => {
+    if (event.method !== "Network.loadingFailed") return "";
+    if (!isStreamTarget(event.url)) return "";
+    if (event.params.type !== "EventSource" && event.params.type !== "WebSocket") return "";
+    if (!discontinuedInStage.has(event.params.requestId)) return "";
+    return "the harness discontinued this connection by its own action: " + discontinuedInStage.get(event.params.requestId).reason;
+  };
+  /* The same disruptive action also breaks FOLLOW-UP attempts: a page the harness navigated away from, or one
+     still pointed at an authority it just restarted, keeps retrying its stream with brand-new request IDs.
+     Those are tolerated only on an authority the harness itself disrupted inside THIS stage, and only for
+     EventSource/WebSocket on a stream endpoint; the window closes with the stage, so a transport that stays
+     broken past the stage boundary still fails. */
+  const isDisruptedStreamFailure = (event, discontinuedInStage) => {
+    if (event.method !== "Network.loadingFailed") return "";
+    if (event.params.type !== "EventSource" && event.params.type !== "WebSocket") return "";
+    if (!isStreamTarget(event.url)) return "";
+    const authority = authorityOf(event.url);
+    if (authority === "") return "";
+    const reasons = [...discontinuedInStage.values()].filter((meta) => authorityOf(meta.url) === authority).map((meta) => meta.reason);
+    if (reasons.length === 0) return "";
+    return "the harness itself disrupted this authority in this stage (" + [...new Set(reasons)].join(", ") + ")";
+  };
+  /* The browser echoes a failed transport through the network Log too. That echo is accepted only when the
+     SAME stage already produced a tolerated teardown on the same authority, so it can never stand alone. */
+  const isStreamLogEcho = (event, tornAuthorities) => {
+    if (event.method !== "Log.entryAdded") return "";
+    const entry = event.params.entry;
+    if (entry.source !== "network") return "";
+    if (!/net::ERR_/.test(String(entry.text))) return "";
+    const target = isStreamTarget(event.url) ? event.url : quotedUrl(entry.text);
+    if (target === "" || !isStreamTarget(target)) return "";
+    if (!tornAuthorities.has(authorityOf(target))) return "";
+    return "network Log echo of a teardown already tolerated on " + authorityOf(target);
   };
   /* allowStreamTeardown is true only for stages in which the harness itself navigates, goes offline or restarts the instance. */
-  /* The harness itself takes the page offline, so its own reachability probe MUST fail. That failure is
-     required evidence for the stage (asserted below), and it is excluded from the unexpected bucket by
-     exact shape: a Fetch/XHR failure - or its network Log echo - on the document URL itself, carrying
-     ERR_INTERNET_DISCONNECTED. No other error text and no other URL is ever tolerated this way. */
+  /* The harness itself takes the page offline, so its own probes MUST fail. Those failures are required
+     evidence for the stage (asserted below), and they are excluded from the unexpected bucket by exact
+     shape: the reachability probe is a Fetch/XHR failure - or its network Log echo - on the document URL,
+     and the transport probe is a WebSocket/EventSource failure or its Log echo on a stream endpoint. Both
+     have to carry exactly ERR_INTERNET_DISCONNECTED, the error this harness provokes by going offline; no
+     other error text and no other URL is ever tolerated this way. */
   const isInducedOfflineFailure = (event, documentUrl) => {
-    if (event.url !== documentUrl) return false;
+    const offlineText = (text) => /net::ERR_INTERNET_DISCONNECTED/.test(String(text));
     if (event.method === "Network.loadingFailed") {
-      return (event.params.type === "Fetch" || event.params.type === "XHR") && event.params.errorText === "net::ERR_INTERNET_DISCONNECTED";
+      if (event.url === documentUrl) return (event.params.type === "Fetch" || event.params.type === "XHR") && event.params.errorText === "net::ERR_INTERNET_DISCONNECTED";
+      return (event.params.type === "WebSocket" || event.params.type === "EventSource") && isStreamTarget(event.url) && offlineText(event.params.errorText);
     }
     if (event.method === "Log.entryAdded") {
       const entry = event.params.entry;
-      return entry.source === "network" && /net::ERR_INTERNET_DISCONNECTED/.test(String(entry.text));
+      if (entry.source !== "network" || !offlineText(entry.text)) return false;
+      const target = isStreamTarget(event.url) ? event.url : (quotedUrl(entry.text) || event.url);
+      return target === documentUrl || isStreamTarget(target);
     }
     return false;
   };
   const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl) => {
     const events = stageEvents();
+    const discontinuedInStage = discontinued;
     stageMark = cdp.errorEvents().length;
+    discontinued = new Map();
     evidence["console_" + stage] = events;
-    const tolerated = allowStreamTeardown ? events.filter(isStreamTeardown) : [];
+    evidence["discontinuedConnections_" + stage] = [...discontinuedInStage.entries()].map(([requestId, meta]) => ({ requestId, reason: meta.reason, url: meta.url }));
+    /* A tolerated event must be the teardown of a connection the harness itself discontinued, and the Log
+       echo of such a teardown is the only other thing accepted - never a standalone failure. */
+    const tolerated = [];
+    if (allowStreamTeardown) {
+      for (const event of events) {
+        const reason = isDiscontinuedTeardown(event, discontinuedInStage) || isDisruptedStreamFailure(event, discontinuedInStage);
+        if (reason !== "") tolerated.push({ event, reason });
+      }
+      const tornAuthorities = new Set(tolerated.map((item) => authorityOf(item.event.url)));
+      for (const event of events) {
+        if (tolerated.some((item) => item.event === event)) continue;
+        const echo = isStreamLogEcho(event, tornAuthorities);
+        if (echo !== "") tolerated.push({ event, reason: echo });
+      }
+    }
     const induced = inducedOfflineUrl === undefined ? [] : events.filter((event) => isInducedOfflineFailure(event, inducedOfflineUrl));
-    evidence["tolerated_" + stage] = tolerated;
+    evidence["tolerated_" + stage] = tolerated.map((item) => ({ method: item.event.method, url: item.event.url, reason: item.reason, text: item.event.text }));
     if (inducedOfflineUrl !== undefined) {
       evidence["inducedOffline_" + stage] = induced;
-      check("the induced offline probe really failed at the network layer (" + stage + ")", induced.some((event) => event.method === "Network.loadingFailed"), JSON.stringify(induced.map((event) => event.text)));
+      check("the induced offline probe really failed at the network layer (" + stage + ")", induced.some((event) => event.method === "Network.loadingFailed" && event.url === inducedOfflineUrl), JSON.stringify(induced.map((event) => event.text)));
     }
-    const bad = events.filter((event) => !tolerated.includes(event) && !induced.includes(event));
+    const bad = events.filter((event) => !tolerated.some((item) => item.event === event) && !induced.includes(event));
     const what = allowStreamTeardown
       ? "no runtime exceptions or console errors beyond the transport the harness itself tore down"
       : "no console exceptions, failures or protocol errors";
@@ -364,7 +524,7 @@ async function main() {
   };
   assertNoStageErrors("onInitialLoad", false);
 
-  await cdp.send("Page.reload").catch(() => {});
+  await reload();
   await sleep(7000);
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-04-after-reload.png"));
   const afterReload = JSON.parse(await cdp.eval(SWITCH_PROBE));
@@ -374,18 +534,38 @@ async function main() {
   assertNoStageErrors("afterReload", true);
 
   /* A real transport interruption, evidenced from both sides: the page is taken offline through CDP (the
-     emulation call itself has to succeed), the page's own request has to fail while offline, and after the
-     network returns the SAME document has to recover and still report the Host value. There is deliberately
+     emulation call itself has to succeed), the streaming connection the document was HOLDING has to be torn
+     down while offline, the page's own request has to fail, and after the network returns the SAME document
+     has to come back with a NEW streaming connection and still report the Host value. There is deliberately
      no reload in this stage, so a dead reconnect cannot hide behind a fresh page load. */
   await cdp.send("Network.enable").catch(() => {});
   const reachProbe = "fetch(location.pathname + location.search, { method: 'GET', cache: 'no-store' }).then((response) => 'status:' + response.status).catch((error) => 'rejected:' + String(error))";
   const docMark = String(await cdp.eval("(window.__e2eDocMark = 'mark-' + Math.random().toString(36).slice(2), window.__e2eDocMark)"));
-  evidence.reconnect = { docMarkBefore: docMark };
+  const preReconnect = cdp.liveConnections();
+  const preReconnectIds = new Set(preReconnect.map((connection) => connection.requestId));
+  evidence.reconnect = { docMarkBefore: docMark, connectionsBefore: preReconnect };
+  check("the document holds a live streaming connection before the interruption", preReconnect.length > 0, JSON.stringify(preReconnect));
+  const preSeq = cdp.eventSeq;
   let offlineApplied = true;
+  discontinue("forced offline");
   try { await cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
   catch (error) { offlineApplied = false; evidence.reconnect.offlineError = String(error); }
   check("the harness can really take the page offline through CDP", offlineApplied, "Network.emulateNetworkConditions");
-  await sleep(2500);
+  await sleep(4000);
+  /* The interruption has to reach the transport the document was already holding, and that has to be shown
+     from the page, not inferred from a failed document fetch. The browser reports no close event for sockets
+     severed by CDP offline emulation (recorded below: no webSocketClosed and no RequestId-based teardown for
+     the connections that were live at snapshot time), so the stage evidences the interruption page-side: the
+     endpoint cannot be reached at all while the window lasts. Recovery is asserted separately - a NEW
+     streaming requestId plus a working Host write. */
+  const preReconnectTeardown = cdp.teardownEvents(preSeq).filter((event) => preReconnectIds.has(event.requestId));
+  const preReconnectClosed = preReconnect.filter((connection) => { const state = cdp.connections.get(connection.requestId); return state !== undefined && state.closedSeq !== null && state.closedSeq > preSeq; });
+  evidence.reconnect.preReconnectTeardown = preReconnectTeardown;
+  evidence.reconnect.preReconnectClosed = preReconnectClosed;
+  const transportProbe = "new Promise((resolve) => { const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://'; let socket = null; try { socket = new WebSocket(scheme + location.host + '/api/remote.mux'); } catch (error) { resolve('constructor:' + String(error)); return; } socket.onopen = () => resolve('opened'); socket.onerror = () => resolve('failed'); socket.onclose = () => resolve('closed'); setTimeout(() => resolve('timeout'), 4000); })";
+  const transportWhileOffline = await cdp.eval(transportProbe).catch((error) => "eval-failed:" + String(error));
+  evidence.reconnect.transportWhileOffline = transportWhileOffline;
+  check("while offline the page cannot open a new transport connection to the settings endpoint", transportWhileOffline !== "opened", String(transportWhileOffline));
   const whileOffline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
   evidence.reconnect.whileOffline = whileOffline;
   check("while offline the page's own transport request genuinely fails", /^rejected:/.test(String(whileOffline)), String(whileOffline).slice(0, 160));
@@ -394,17 +574,41 @@ async function main() {
   await sleep(8000);
   const afterOnline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
   const docMarkAfter = String(await cdp.eval("String(window.__e2eDocMark)"));
+  const liveAfterReconnect = cdp.liveConnections();
+  const recoveredConnections = liveAfterReconnect.filter((connection) => !preReconnectIds.has(connection.requestId));
   evidence.reconnect.afterOnline = afterOnline;
   evidence.reconnect.docMarkAfter = docMarkAfter;
+  evidence.reconnect.connectionsAfter = liveAfterReconnect;
+  evidence.reconnect.recoveredConnections = recoveredConnections;
   check("the page's transport recovers without a reload (same document)", /^status:/.test(String(afterOnline)) && docMarkAfter === docMark, JSON.stringify({ afterOnline, docMark, docMarkAfter }));
+  check("the recovered document re-establishes a NEW streaming connection (the old one is not reused)", recoveredConnections.length > 0, JSON.stringify(recoveredConnections));
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-05-after-reconnect.png"));
   const afterReconnect = JSON.parse(await cdp.eval(SWITCH_PROBE));
   evidence.switchAfterReconnect = afterReconnect;
   if (MODE === "overlay") check("the Host value is intact after a transport interruption on the same document", afterReconnect.state === "false", JSON.stringify(afterReconnect));
   else check("CONTROL: the page-local flip is still page-local after a transport interruption", afterReconnect.state === "true", JSON.stringify(afterReconnect));
+  if (MODE === "overlay") {
+    /* The recovered transport has to be functional, not merely reachable: the same setting must still be
+       writeable through it, and the stored YAML has to move and come back to exactly its former text. */
+    const patchBeforeRoundTrip = await readPatch();
+    const roundTripOn = await cdp.eval(SWITCH_CLICK);
+    await sleep(3000);
+    const patchRoundTripOn = await readPatch();
+    const stateRoundTripOn = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    const roundTripBack = await cdp.eval(SWITCH_CLICK);
+    await sleep(3000);
+    const patchRoundTripBack = await readPatch();
+    const stateRoundTripBack = JSON.parse(await cdp.eval(SWITCH_PROBE));
+    evidence.reconnect.roundTrip = {
+      click: roundTripOn, clickBack: roundTripBack, patchBefore: patchBeforeRoundTrip, patchOn: patchRoundTripOn,
+      patchBack: patchRoundTripBack, stateOn: stateRoundTripOn.state, stateBack: stateRoundTripBack.state,
+    };
+    check("the recovered transport still writes the setting through to the instance Host", roundTripOn === "CLICKED" && /enabled:\s*true/.test(patchRoundTripOn) && stateRoundTripOn.state === "true", JSON.stringify({ click: roundTripOn, patch: patchRoundTripOn.slice(0, 240) }));
+    check("reverting the setting rewrites the stored YAML to exactly its former text", roundTripBack === "CLICKED" && patchRoundTripBack === patchBeforeRoundTrip && stateRoundTripBack.state === "false", JSON.stringify({ clickBack: roundTripBack, sameText: patchRoundTripBack === patchBeforeRoundTrip, state: stateRoundTripBack.state }));
+  }
   assertNoStageErrors("afterReconnect", true, documentUrl);
 
-  await cdp.send("Page.navigate", { url: instance.url }).catch(() => {});
+  await navigate(instance.url);
   await waitFor(cdp, SHELL_PROBE, "app shell on loopback");
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-06-loopback-settings.png"));
   const loopbackEditor = JSON.parse(await cdp.eval(HOST_EDITOR_PROBE));
@@ -421,6 +625,7 @@ async function main() {
     check("CONTROL: loopback access does persist (same page, same instance)", /enabled:\s*false/.test(patchAfterLoopback), loopbackClick + " " + patchAfterLoopback.slice(0, 300));
   }
 
+  discontinue("instance restart");
   instance.child.kill("SIGTERM");
   await sleep(3000);
   instance = await startInstance(home, "proto");
@@ -428,7 +633,7 @@ async function main() {
   const remoteUrl2 = "http://" + TEST_HOST + ":" + restarted.port + "/" + restarted.search;
   evidence.urls.remoteAfterRestart = remoteUrl2;
   evidence.files.profilePatchAfterRestart = await readPatch();
-  await cdp.send("Page.navigate", { url: instance.url }).catch(() => {});
+  await navigate(instance.url);
   await waitFor(cdp, SHELL_PROBE, "app shell on loopback after restart");
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-07-loopback-after-restart.png"));
   const loopbackRestart = JSON.parse(await cdp.eval(SWITCH_PROBE));
@@ -436,7 +641,7 @@ async function main() {
   check("the instance Host holds the persisted value after a restart", loopbackRestart.state === "false", JSON.stringify(loopbackRestart));
 
   assertNoStageErrors("afterLoopbackAccess", true);
-  await cdp.send("Page.navigate", { url: remoteUrl2 }).catch(() => {});
+  await navigate(remoteUrl2);
   await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after restart");
   await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-08-remote-after-restart.png"));
   const afterRestart = JSON.parse(await cdp.eval(SWITCH_PROBE));
@@ -451,11 +656,16 @@ async function main() {
   check("fence: /api from the loopback authority without a cookie stops at the auth gate", fence.loopbackNoCookie.status === 401, JSON.stringify(fence.loopbackNoCookie));
   check("fence: /api with an untrusted Host is forbidden", fence.evilHost.status === 403, JSON.stringify(fence.evilHost));
   check("fence: an authenticated cookie does NOT lift the fence for an untrusted Host", fence.evilHostWithCookie.status === 403, JSON.stringify(fence.evilHostWithCookie));
-  check("fence+auth: the authority-bound cookie passes BOTH the fence and the auth gate on the trusted Host (the probe route itself is gone: not 401/403)", fence.trustedWithCookie.status !== 401 && fence.trustedWithCookie.status !== 403, JSON.stringify(fence.trustedWithCookie));
+  check("fence+auth: the authority-bound cookie passes BOTH the fence and the auth gate on the trusted Host (a real HTTP answer for the deliberately absent probe route)", fence.trustedWithCookie.status === 404, JSON.stringify(fence.trustedWithCookie));
   check("auth: the same cookie replayed on the loopback authority is rejected (the session cookie is authority-bound)", fence.loopbackWithCookie.status === 401, JSON.stringify(fence.loopbackWithCookie));
   check("fence: a cross-site Origin ALONE (no Sec-Fetch-Site) is forbidden", fence.evilOriginOnly.status === 403, JSON.stringify(fence.evilOriginOnly));
   check("fence: Sec-Fetch-Site cross-site ALONE (no Origin) is forbidden", fence.fetchSiteOnly.status === 403, JSON.stringify(fence.fetchSiteOnly));
   check("fence: both cross-site signals together stay forbidden", fence.evilOriginAndFetchSite.status === 403, JSON.stringify(fence.evilOriginAndFetchSite));
+  check("fence: a cross-site Origin is still forbidden while the account cookie is presented", fence.evilOriginWithCookie.status === 403, JSON.stringify(fence.evilOriginWithCookie));
+  check("fence: Sec-Fetch-Site cross-site is still forbidden while the account cookie is presented", fence.fetchSiteWithCookie.status === 403, JSON.stringify(fence.fetchSiteWithCookie));
+  check("transport: an upgrade attempt on the real transport endpoint from an untrusted Host is refused, never upgraded", fence.upgradeEvilHost.upgraded === false && fence.upgradeEvilHost.status === 403, JSON.stringify(fence.upgradeEvilHost));
+  check("transport: an unauthenticated upgrade attempt on the real transport endpoint stops at the auth gate, never upgraded", fence.upgradeTrustedNoCookie.upgraded === false && fence.upgradeTrustedNoCookie.status === 401, JSON.stringify(fence.upgradeTrustedNoCookie));
+  check("transport control: the same endpoint really does upgrade for a request that passes both gates", fence.upgradeTrustedWithCookie.upgraded === true, JSON.stringify(fence.upgradeTrustedWithCookie));
   check("fence control: an Origin equal to the Host is accepted by the fence (reaches the auth gate)", fence.sameOrigin.status === 401, JSON.stringify(fence.sameOrigin));
   check("auth: the token-minted cookie is bound to the trusted authority and presented in the cookie-bearing probes", evidence.fenceCookieMinted === true, JSON.stringify(fence.indexToken.cookies));
   check("auth: the root token mints the authority-bound cookie and redirects", fence.indexToken.status === 303 && fence.indexToken.location === "./" && fence.indexToken.setCookie === true, JSON.stringify(fence.indexToken));
@@ -474,10 +684,11 @@ async function main() {
     const rollbackManifest = JSON.parse(await readFile(join(profileDir, "package.json"), "utf8"));
     rollbackManifest.dsh = { profile: { bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"] } };
     await writeFile(join(profileDir, "package.json"), JSON.stringify(rollbackManifest, null, 2) + "\n");
+    discontinue("instance restart");
     instance.child.kill("SIGTERM");
     await sleep(3000);
     instance = await startInstance(home, "proto");
-    await cdp.send("Page.navigate", { url: instance.url }).catch(() => {});
+    await navigate(instance.url);
     await waitFor(cdp, SHELL_PROBE, "app shell on loopback after rollback");
     await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-09-after-rollback.png"));
     const rolledBack = JSON.parse(await cdp.eval(SWITCH_PROBE));
@@ -491,7 +702,8 @@ async function main() {
     assertNoStageErrors("afterRollback", true);
   }
 
-  assertNoStageErrors("atEnd", true);
+  /* Nothing disruptive happens between the last stage and this point, so the final stage tolerates nothing. */
+  assertNoStageErrors("atEnd", false);
   evidence.consoleFullTail = cdp.errors().slice(-8);
   evidence.consoleEventCount = cdp.errors().length;
   evidence.settingsDialogText = await cdp.eval("Array.from(document.querySelectorAll(\"[role=dialog]\")).map((d) => d.innerText).join(\"\\n===\\n\").slice(0, 2500)");

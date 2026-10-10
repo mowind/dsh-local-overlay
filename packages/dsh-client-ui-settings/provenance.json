@@ -13,6 +13,64 @@
     "@deepseek-ai/dsh-client-ui-settings": "packages/client/ui-settings of the baseline build (MIT, Copyright (c) 2026 DeepSeek)",
     "@deepseek-ai/dsh-web-app": "the Web app package of the baseline build (MIT, Copyright (c) 2026 DeepSeek)"
   },
+  "packages": [
+    {
+      "dir": "packages/dsh-client-ui-settings",
+      "manifest": {
+        "name": "@dsh-local-overlay/dsh-client-ui-settings",
+        "version": "0.1.0",
+        "baselinePackage": "@deepseek-ai/dsh-client-ui-settings@0.2.1-alpha.2",
+        "baselineCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+        "clientPlatform": "web",
+        "clientEntry": "lib/client.js",
+        "files": [
+          "lib/index.js",
+          "lib/client.js",
+          "lib/types/**/*.d.ts",
+          "LICENSE",
+          "NOTICE",
+          "provenance.json"
+        ],
+        "bundlePatch": null
+      },
+      "authored": {
+        "package.json": "e1762e6c700a619d1c2f17d0229ff473a4e0df725421778568e12d4c612b1955",
+        "NOTICE": "b78ac28e64abc9c78cb323b0af42e8039197988b273d5f5705dda2154fff303e"
+      }
+    },
+    {
+      "dir": "packages/dsh-web-composition",
+      "manifest": {
+        "name": "@dsh-local-overlay/web-composition",
+        "version": "0.1.0",
+        "baselinePackage": "@deepseek-ai/dsh-web-app@0.2.1-alpha.2",
+        "baselineCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+        "clientPlatform": null,
+        "clientEntry": null,
+        "files": [
+          "cordis.patch.yml",
+          "presets/standard.patch.yml",
+          "presets/ptc.patch.yml",
+          "presets/minimal.patch.yml",
+          "presets/cordis.patch.yml",
+          "LICENSE",
+          "NOTICE",
+          "provenance.json"
+        ],
+        "bundlePatch": [
+          "./cordis.patch.yml",
+          "./presets/standard.patch.yml",
+          "./presets/ptc.patch.yml",
+          "./presets/minimal.patch.yml",
+          "./presets/cordis.patch.yml"
+        ]
+      },
+      "authored": {
+        "package.json": "fbb01134ae45607abb5a9f8c2bb7b6b1b0e71790eee27f19b2ea69066bef5b51",
+        "NOTICE": "d57fa8ada7cbd36b527c33ec289b12db16bd6ea5ad765e4da4b5e6f10e8baf37"
+      }
+    }
+  ],
   "files": [
     {
       "path": "packages/dsh-client-ui-settings/LICENSE",

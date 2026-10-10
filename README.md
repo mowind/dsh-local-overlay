@@ -39,7 +39,7 @@
 
 ## 可复现安装步骤
 
-以下步骤就是 [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) 在 `--mode overlay` 下自动执行的流程，可手工照做。
+以下步骤就是 [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) 在 `--mode overlay` 下自动执行的流程，可手工照做。第 1–5 步（建隔离 home、打包、装组件、来源预检、装组合包）在开发时按下面的命令逐条照抄执行过一次，每一步都成功结束；本节记录的 `dsh plugin add` 行为就是那次实测的结果，而不是从源码推测的。
 
 1. 准备一个隔离的实例 home（不触碰现有实例）：
 
@@ -59,24 +59,34 @@
    (cd packages/dsh-web-composition   && npm pack --pack-destination /tmp/dsh-overlay-artifacts)
    ```
 
-3. 用文档化的 CLI 把两个包装进 profile（先装组件，再装组合包）：
+3. 先用文档化的 CLI 把设置组件装进 profile（这一步不会切换组合；组合包等预检通过后再装）：
 
    ```bash
    DSH_HOME="$DSH_HOME" dsh plugin --profile proto add /tmp/dsh-overlay-artifacts/dsh-local-overlay-dsh-client-ui-settings-0.1.0.tgz
-   DSH_HOME="$DSH_HOME" dsh plugin --profile proto add /tmp/dsh-overlay-artifacts/dsh-local-overlay-web-composition-0.1.0.tgz
    ```
 
-   先装组件是必须的：组合包的 roster 行要能从 profile 的 `node_modules` 解析到它。另外 `dsh plugin add` 只保证两件事：包进了 profile 的 `node_modules`，并且被添加的包出现在 `dsh.profile.bundles` 里；它会把 manifest 里的 `dsh.profile.bundles` 重写成「基础包 + 本次添加的包」，所以每次 `add` 之前都要重新写一遍期望的 bundles（自动化脚本就是这样做的）。
+   先装组件是必须的：组合包的 roster 行要能从 profile 的 `node_modules` 解析到它。
 
-4. 切换组合**之前**先跑来源预检（这是门禁，不通过就不要继续）：
+   `dsh plugin add` 的实测行为（按本文命令逐条照抄执行过）：包一定进 profile 的 `node_modules`；如果这个包**是**组合层（manifest 里有 `dsh.bundle.patch`），它会顺带把 `dsh.profile.bundles` 重写成「基础包 + 本次添加的包」。所以装组件后 bundles 仍是 `["@deepseek-ai/dsh-base"]`，装组合包后（下一步）被改写成 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`；想装多个组合层时每次 `add` 之前都要重新写一遍期望的 bundles（自动化脚本就是这样做的）。顺带一提，profile 的 `node_modules` 里只会出现我们自己装的 `@dsh-local-overlay/*`：`@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 是从 DSH 安装目录解析的，这也是验证脚本查组合层时要先查 profile、再回退到安装目录的原因。
+
+4. 装组合包**之前**先跑来源预检（这是门禁，不通过就不要继续）：
 
    ```bash
    node tools/verify-artifacts.mjs
    ```
 
-   它要求已安装的 DSH 正好是记录的基线版本，逐文件核对 sha256 与改动 diff，并核对两个交付包实际打包出的文件清单与 manifest 元数据；不匹配则退出码 1 并列出问题。
+   它要求已安装的 DSH 正好是记录的基线版本，逐文件核对 sha256 与改动 diff，核对两个交付包实际打包出的文件清单、两个自有 manifest 的字段（包名、版本、基线标记、`files` 清单、`dsh.bundle.patch` 的顺序与重复项）以及包内 `provenance.json` 与仓库副本逐字节一致；不匹配则退出码 1 并列出问题。
 
-5. 只有预检通过，才让 profile 加载自有组合包：把 `dsh.profile.bundles` 改为 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`（不再包含 `@deepseek-ai/dsh-web-app`）。
+   门禁必须正好排在这一步：下一行的 `dsh plugin add` 自己就会把组合切过去，装完再预检就不再是「切换前」了。自动化脚本还会跑两次负向对照：故意改坏记录里某个 verbatim 文件的 sha256，以及把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验，两次都要求退出码 1。
+
+5. 只有预检通过，才把自有组合包装进 profile（这一次 `add` 会把 `dsh.profile.bundles` 自己改成 `["@deepseek-ai/dsh-base", "@dsh-local-overlay/web-composition"]`，不再包含 `@deepseek-ai/dsh-web-app`）：
+
+   ```bash
+   DSH_HOME="$DSH_HOME" dsh plugin --profile proto add /tmp/dsh-overlay-artifacts/dsh-local-overlay-web-composition-0.1.0.tgz
+   node -e 'console.log(require(process.env.DSH_HOME + "/profiles/proto/package.json").dsh.profile.bundles)'
+   ```
+
+   第二行应打印 `[ '@deepseek-ai/dsh-base', '@dsh-local-overlay/web-composition' ]`。要装多个组合层时，每次 `add` 之前重新写一遍期望的 bundles（自动化脚本就是这样做的）。
 
 6. 启动实例（隔离 home，非 loopback 来源要显式声明为可信主机）：
 
@@ -123,13 +133,23 @@ node tools/e2e-remote-settings.mjs --mode control                 # 控制组：
 node tools/e2e-remote-settings.mjs --mode overlay                 # 覆盖组：自有组合包
 ```
 
-两个模式断言同一批事实：真实打包产物、由 CLI 装入隔离 profile、**所有已加载组合层里恰好只有一行 ui-settings provider（且它指向预期的包）**、页面侧 `window.__DSH_BOOT__` 里恰好只注册一个设置客户端模块、组合替换生效、从非 loopback 来源加载页面、远程页面不暴露主机配置编辑器入口、远程点击能被接受、持久化行为、刷新后的取值、**一次真实的传输中断**（CDP 离线 → 页面自身请求确实失败 → 恢复后同一文档不带刷新地重新连通并仍显示 Host 值）、重启后的取值、控制台异常在 6 个阶段（初次加载、刷新后、重连后、loopback 访问后、重启后、结束时；`overlay` 模式另有第 7 个「回退后」阶段）逐段断言，以及 12 项 fence/认证检查：`/api` 上可信 Host 不带 cookie 与 loopback 不带 cookie 都是 401（未认证不越界）；未知 Host 是 403，且**带上已认证 cookie 仍是 403**（认证不能绕过 Host fence）；同一枚 authority 绑定的 cookie 在可信 Host 上同时通过 fence 与认证门禁（不再是 401/403），而把它重放到 loopback authority 上会被判 401（会话 cookie 绑定 authority，不能跨 authority 复用）；单独的跨站 `Origin`（不带 `Sec-Fetch-Site`）是 403；单独的 `Sec-Fetch-Site: cross-site`（不带 `Origin`）是 403；两者同时是 403；`Origin` 与 Host 相同的对照请求能穿过 fence 到达认证门禁；文档带 token 是 303 加 `location: ./` 与 Set-Cookie，无 token 是 401。每个 fence 信号单独探测，避免一个信号的有效拒绝掩盖另一个信号的失效。证据写入 [evidence/](evidence/) 的 `<mode>-evidence.json` 与 `<mode>-NN-*.png` 截图，任一检查失败时退出码为 1。
+两个模式断言同一批事实：真实打包产物、由文档化 CLI 装入隔离 profile（并在每次 `add` 之后读回 `dsh.profile.bundles`：装组件不切组合、装组合包自己切组合，这正说明门禁必须排在装组合包之前）、**所有已加载组合层里恰好只有一行 ui-settings provider（且它指向预期的包）**、页面侧 `window.__DSH_BOOT__` 里设置 provider 模块恰好只有一个（`-account`、`-general`、`-models` 等同族设置包在任何配置下都会加载，按精确包名排除）、组合替换生效、从非 loopback 来源加载页面、远程页面不暴露主机配置编辑器入口、远程点击能被接受、持久化行为、刷新后的取值、**一次真实的传输中断**（先记录文档当时持有的流连接，CDP 离线必须成功 → 离线期间页面既打不开新的传输连接、它自己发的请求也确实失败 → 恢复后**同一文档、不带刷新**多出一条新的流连接并仍显示 Host 值；`overlay` 模式还在恢复后的连接上把开关写一次再写回来，证明这条连接真的能写入 Host，而不只是能连通）、重启后的取值、控制台异常在 6 个阶段（初次加载、刷新后、重连后、loopback 访问后、重启后、结束时；`overlay` 模式另有第 7 个「回退后」阶段）逐段断言，以及 18 项 fence/认证检查：`/api` 上可信 Host 不带 cookie 与 loopback 不带 cookie 都是 401（未认证不越界）；未知 Host 是 403，且**带上已认证 cookie 仍是 403**（认证不能绕过 Host fence）；同一枚 authority 绑定的 cookie 在可信 Host 上同时通过 fence 与认证门禁（读到 404，即真的到达了那个故意不存在的探针路由——若网络层失败拿到 `status: 0` 就不算通过），而把它重放到 loopback authority 上会被判 401（会话 cookie 绑定 authority，不能跨 authority 复用）；单独的跨站 `Origin`（不带 `Sec-Fetch-Site`）是 403；单独的 `Sec-Fetch-Site: cross-site`（不带 `Origin`）是 403；两者同时是 403；这两个信号各自**再带上已认证 cookie** 仍然是 403；`Origin` 与 Host 相同的对照请求能穿过 fence 到达认证门禁；对真实传输端点 `/api/remote.mux` 的三次 WebSocket 升级尝试（未知 Host 403、可信 Host 未认证 401、两者都过时真的升级成功）证明升级路径不被绕过；文档带 token 是 303 加 `location: ./` 与 Set-Cookie，无 token 是 401。每个 fence 信号单独探测，避免一个信号的有效拒绝掩盖另一个信号的失效。证据写入 [evidence/](evidence/) 的 `<mode>-evidence.json` 与 `<mode>-NN-*.png` 截图，任一检查失败时退出码为 1。
 
-`overlay` 模式在切换组合包之前会先跑来源预检；预检失败即抛错中止（`provenance preflight failed; refusing to install the artifacts and switch the composition`），不会用未核对基线的副本继续验证。同一个预检还会跑一次负向对照：把记录里某个 verbatim 文件的 sha256 故意改坏，要求预检以退出码 1 拒绝，证明门禁不是永远通过。控制台断言按阶段**结构性**分类：`Runtime.exceptionThrown`、`Runtime.consoleAPICalled` 的 error，以及落在「测试自身正在强制断网/重启的动作窗口之外」的 `Network.loadingFailed` / `Log.entryAdded` 都判失败；容忍项只按事件类型与 URL 精确匹配：`Network.loadingFailed` 必须是 `EventSource`/`WebSocket` 且 URL 命中 `/plugins/events` 或 `/api/remote.mux`；控制台回声必须是 `Log.entryAdded`、`entry.source === "network"`（页面 JS 报错是 `javascript`/`console-api`，永不豁免）、消息里含真实 `net::ERR_` 码且指向同一批传输端点。所有容忍项逐条记入证据的 `tolerated_<stage>`，不放行任何仅凭错误文本字样匹配的条目，也不放行 `Script`/`Stylesheet`/`Fetch` 等其它资源类型。
+`overlay` 模式在装组合包**之前**就会跑来源预检；预检失败即抛错中止（`provenance preflight failed; refusing to install the artifacts and switch the composition`），不会用未核对基线的副本继续验证。同一个预检还会跑两次负向对照：把记录里某个 verbatim 文件的 sha256 故意改坏，以及把组合包 `dsh.bundle.patch` 的顺序调换后重跑校验，两次都要求退出码 1，证明门禁不是永远通过。
 
-最近一次记录（基线 `0.2.1-alpha.2` / `d7432673`，冻结树）：`control` 38 项全部通过，`overlay` 48 项全部通过，两个模式退出码都是 0。`overlay` 多出的 10 项是来源预检、预检负向对照、单行 provider 断言、单设置模块断言、真实传输中断的额外断言，以及最后一整段「文档化回退被真实执行」的断言（2 项）。
+控制台断言按阶段**结构性**分类，不靠错误文本关键词：`Runtime.exceptionThrown` 与 `Runtime.consoleAPICalled` 的 error 在任何阶段、两种模式下都判失败，消息里出现 `net::ERR_*` 字样也换不来豁免；`Script`、`Stylesheet`、`Document`、`Fetch`、`XHR` 等类型的 `Network.loadingFailed` 在任何阶段都判失败（强制断网窗口内由测试自己触发的两类失败除外，见下）。
 
-同一份证据里的关键取值（`overlay`）：远程页面开关初始为开（`"true"`，浏览器本地态），点一下后刷新、重连、重启、回退重启之后都读到 `"false"`；`/api` 上的 fence 判定为可信 Host 无 cookie 401、loopback 无 cookie 401、未知 Host 403、未知 Host **带已认证 cookie 仍 403**、可信 Host 带同一枚 cookie 404（fence 与认证都过了，只是这个探针路由不存在）、同一枚 cookie 重放到 loopback authority 401、单独 `Origin` 403、单独 `Sec-Fetch-Site` 403、两者同时 403、`Origin` 与 Host 相同的对照 401；文档带 token 303 加 `location: ./` 与 Set-Cookie、无 token 401。重连阶段的证据是「同一文档」：页面标记刷新前后一致、离线期间页面自身请求 `rejected:TypeError: Failed to fetch`、恢复后 `status:200`，并且这一条离线失败被当作**必需证据**单独断言（`inducedOffline_afterReconnect`），不是被静默容忍。控制台方面只有两次由测试自己重启实例造成的传输拆除被结构性命中（`afterLoopbackAccess` 与 `afterRollback` 各 7 条），其它阶段事件数为 0。
+流式传输的容忍有**两把尺子，且都以阶段为窗口**：一是 `requestId` 绑定——该 `requestId` 必须落在本阶段开始时记录、进入下一阶段即清空的 `discontinued` 集合里（也就是这条连接是测试自己用导航、刷新、强制断网或重启主动拆掉的）；二是 authority 绑定——一个**新的** `WebSocket`/`EventSource` 请求，只要它的 authority 等于本阶段被测试自己拆过的连接的 authority，也按「测试自己在这阶段拆了这个 authority」容忍。两条都要求 URL 精确命中 `/plugins/events` 或 `/api/remote.mux` 且类型是 `WebSocket`/`EventSource`。之所以需要第二条：被导航走掉的页面和实例被重启前的页面会**不断用新 `requestId` 重试**，而浏览器对 CDP 强制离线切断的 socket 干脆不报关闭事件（实测 5 秒内既没有 `webSocketClosed` 也没有 `loadingFailed`）。窗口随阶段关闭，所以「一直坏着」的传输躲不过去：它在**下一个**阶段还会继续开新请求，而那时 `discontinued` 已清空、authority 也不再匹配，于是判失败。浏览器还会把同一次失败以网络日志的形式再报一遍，这条回声只在**同一阶段**已经容忍过**同一 authority** 上的拆除时才被接受（`entry.source === "network"`、含真实 `net::ERR_` 码、URL 命中流端点；文本里出现 `net::ERR_*` 本身不算豁免），页面 JS 自己的报错来源是 `javascript`/`console-api`，永不豁免。
+
+强制断网阶段另有一类**必需证据**（`inducedOffline_afterReconnect`）：测试自己造成的 `ERR_INTERNET_DISCONNECTED` 必须真的在网络上出现，且不能只被静默容忍——具体是文档 URL 上的 `Fetch` 失败，以及测试自己发起的传输探针在流端点上的失败，两者都必须有记录。结构性容忍的流拆除连同理由逐条记入 `tolerated_<stage>`，被测试自己诱发的离线失败单独记入 `inducedOffline_<stage>`，每阶段被主动拆掉的连接记入 `discontinuedConnections_<stage>`。
+
+最近一次记录（基线 `0.2.1-alpha.2` / `d7432673`，冻结树）：`control` 46 项全部通过，`overlay` 61 项全部通过，两个模式退出码都是 0，日志里没有任何 `FAIL` 行。`overlay` 多出的 15 项净增量来自：来源预检与它的两次负向对照（改坏记录里的 sha256、调换组合包 `dsh.bundle.patch` 顺序）、用文档化 CLI 装包后**逐次**读回 `dsh.profile.bundles`、单行 provider 与单设置模块断言、真实传输中断与恢复后 Host 写回环的额外断言，以及最后整段「文档化回退被真实执行」的断言（含回退阶段自己的控制台断言）。
+
+同一份证据里的关键取值（`overlay`）：远程页面开关初始为开（`"true"`，浏览器本地态），点一下后刷新、重连、重启、回退重启之后都读到 `"false"`（每次都是 2 行：`Show coding view` 为关、Host 提供的 `Upload Session Log when using the official model API` 为开）；组合层里重定向到自有包的 `ui-settings` 行只有一行（`./cordis.patch.yml:301`），页面侧 boot 里设置 provider 模块也只有自有包一个，回退后重新变回上游包。
+
+`/api` 上的 fence 判定为可信 Host 无 cookie 401、loopback 无 cookie 401、未知 Host 403、未知 Host **带已认证 cookie 仍 403**、可信 Host 带同一枚 cookie 404（fence 与认证都过了，只是这个探针路由不存在）、同一枚 cookie 重放到 loopback authority 401、单独 `Origin` 403、单独 `Sec-Fetch-Site` 403、两者同时 403、这两个信号各自**再带 cookie** 仍是 403、`Origin` 与 Host 相同的对照 401；`/api/remote.mux` 的三次 WebSocket 升级尝试分别是 403、401 与**真的升级成功**（101）；文档带 token 303 加 `location: ./` 与 Set-Cookie、无 token 401。
+
+重连阶段的证据是「同一文档」：页面标记中断前后一致、离线期间页面自身请求返回 `rejected:TypeError: Failed to fetch`、测试自己的传输探针结果为 `failed`、恢复后文档请求 `status:200` 并且**多出一条新的** `/api/remote.mux` 流连接（新 `requestId`，旧的两条 socket 仍在记录里但已被判死）；恢复后还会在这条新连接上把开关写一次再写回来（`enabled: true` → `enabled: false`，页面读数 `true` → `false`），证明它不只是「能连通」而是**真能写入 Host**。控制台方面，`afterReconnect` 的 3 条事件全是测试自己强制断网诱发的 `ERR_INTERNET_DISCONNECTED`（文档 `Fetch` 失败、传输探针失败及其网络日志回声），作为**必需证据**单独断言（`inducedOffline_afterReconnect`），不是被静默容忍；真正被结构性容忍的只有测试自己重启实例造成的传输拆除——`afterLoopbackAccess` 与 `afterRollback` 各 7 条，其余阶段（初次加载、刷新后、重启后、结束时）事件数都是 0。
 
 ## 已知行为差异与后果
 
@@ -141,6 +161,9 @@ node tools/e2e-remote-settings.mjs --mode overlay                 # 覆盖组：
 
 - 只对记录的基线 `0.2.1-alpha.2` / `d7432673` 有效。换 DSH 版本必须重新生成副本、重算 `provenance.json` 并重跑证据。
 - 不做所有者与访客的权限隔离；不改认证与 Host/Origin 检查；不提供多实例协调。
+- 「非 loopback 来源」在这里只指**浏览器的 origin 与 Host 头**非 loopback（TCP 仍然连本机）。本仓没有做公网绑定或多机部署，真实网络位置需要 SSH 隧道或另一台机器；按 ADR-0002:5，生产侧的 Cloudflare 边界不在本原型验证范围内。
+- 供应链只锁到「已安装基线 + 18 个复制文件的 sha256 + 两个自有 manifest 的字段」这一层：不固定 tarball 哈希、不签名、不校验 pnpm 锁文件。
+- 没有覆盖账号登录门禁的负向用例、设置写入冲突（revision 竞争）、以及 secret 字段的负向用例；回退段落里「凭据不会丢」是读实现得出的推论（只有 `name` 守卫被改，`config` 原样保留），没有用真实 secret 做过负向用例。
 
 ## 组件回退
 

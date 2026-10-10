@@ -8,9 +8,13 @@
  * installation that does not match the recorded baseline fails loudly instead
  * of silently serving an unverified copy.
  *
- * It also pins what the two packages would actually publish: npm pack must
- * contain exactly the recorded copies plus the files we authored, and each
- * package must ship a provenance.json identical to the repository one.
+ * It also pins what the two packages would actually publish and how they declare
+ * themselves: npm pack must contain exactly the recorded copies plus the files we
+ * authored, each package must ship a provenance.json identical to the repository one,
+ * and the authored package.json / NOTICE must still hash to the recorded values with
+ * their manifest metadata (name, version, baseline commit, files list, dsh.client and the
+ * dsh.bundle.patch sequence) matching the recorded pins, so a reordered or repeated
+ * patch list cannot pass just because the packed file list is unchanged.
  *
  * Usage: node tools/verify-artifacts.mjs [--install <dsh install dir>] [--provenance <file>] [--quiet]
  */
@@ -96,6 +100,42 @@ for (const entry of provenance.files) {
   rows.push([entry.kind, entry.path, issues.length === 0 ? "ok" : "FAIL"]);
 }
 
+/* The authored files carry the identity of the packages: their content is pinned, and so is
+   every manifest field the replacement depends on (the patch sequence decides which composition
+   layer wins, and the baseline commit is what makes the copy version-bound). */
+const packages = provenance.packages ?? [];
+if (packages.length !== PACKAGES.length) problems.push("provenance does not pin the authored metadata of every package (recorded " + packages.length + " of " + PACKAGES.length + ")");
+for (const pkg of packages) {
+  const dir = join(ROOT, pkg.dir);
+  const issues = [];
+  for (const [name, hash] of Object.entries(pkg.authored ?? {})) {
+    try { if (sha256(await readFile(join(dir, name))) !== hash) issues.push(name + " changed since it was recorded"); }
+    catch (error) { issues.push(name + ": cannot read (" + error.code + ")"); }
+  }
+  const pin = pkg.manifest ?? {};
+  let manifest;
+  try { manifest = JSON.parse(await readFile(join(dir, "package.json"), "utf8")); }
+  catch (error) { issues.push("package.json: cannot be parsed (" + error.code + ")"); }
+  if (manifest !== undefined) {
+    if (manifest.name !== pin.name) issues.push("manifest name is " + manifest.name + " (recorded " + pin.name + ")");
+    if (manifest.version !== pin.version) issues.push("manifest version is " + manifest.version + " (recorded " + pin.version + ")");
+    const overlay = manifest.overlay ?? {};
+    if (overlay.baselineCommit !== pin.baselineCommit) issues.push("manifest baseline commit is " + overlay.baselineCommit + " (recorded " + pin.baselineCommit + ")");
+    if (pin.baselineCommit !== provenance.baseline.commit) issues.push("the recorded baseline commit of the package differs from the baseline commit of the provenance record");
+    if (overlay.baselinePackage !== pin.baselinePackage) issues.push("manifest baseline package is " + overlay.baselinePackage + " (recorded " + pin.baselinePackage + ")");
+    const files = Array.isArray(manifest.files) ? [...manifest.files].sort() : [];
+    if (JSON.stringify(files) !== JSON.stringify([...(pin.files ?? [])].sort())) issues.push("the published files list differs from the recorded list");
+    const platform = (manifest.dsh?.client?.platform) ?? null;
+    if (platform !== pin.clientPlatform) issues.push("dsh.client.platform is " + platform + " (recorded " + pin.clientPlatform + ")");
+    if (pin.clientEntry !== null && !files.includes(pin.clientEntry)) issues.push("the client entry " + pin.clientEntry + " is not in the published files list");
+    const patch = (manifest.dsh?.bundle?.patch) ?? null;
+    if (JSON.stringify(patch) !== JSON.stringify(pin.bundlePatch)) issues.push("the dsh.bundle.patch sequence differs from the recorded one (order included)");
+    if (Array.isArray(patch) && new Set(patch).size !== patch.length) issues.push("dsh.bundle.patch repeats a patch file");
+  }
+  if (issues.length > 0) problems.push(pkg.dir + ": " + issues.join("; "));
+  rows.push([issues.length === 0 ? "ok" : "FAIL", "manifest", pkg.dir]);
+}
+
 for (const dir of PACKAGES) {
   const recorded = provenance.files.filter((entry) => entry.path.startsWith(dir + "/")).map((entry) => entry.path.slice(dir.length + 1));
   const expected = [...recorded, ...AUTHORED].sort();
@@ -122,4 +162,4 @@ if (problems.length > 0) {
 }
 const modified = provenance.files.filter((entry) => entry.kind === "modified").length;
 console.log("");
-console.log("provenance verification PASSED: " + provenance.files.length + " recorded files (" + modified + " deliberately modified, " + (provenance.files.length - modified) + " byte-identical) match the installed baseline " + provenance.baseline.package + "@" + provenance.baseline.version);
+console.log("provenance verification PASSED: " + provenance.files.length + " recorded files (" + modified + " deliberately modified, " + (provenance.files.length - modified) + " byte-identical) and " + packages.length + " pinned package manifests match the installed baseline " + provenance.baseline.package + "@" + provenance.baseline.version);
