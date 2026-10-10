@@ -1,0 +1,300 @@
+{
+  "mode": "control",
+  "dshBin": "/home/mowind/.local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js",
+  "dshInstall": "/home/mowind/.local/lib/node_modules/@deepseek-ai/dsh",
+  "chromium": "/usr/sbin/chromium",
+  "testHost": "dsh-proto.test",
+  "checks": [
+    {
+      "name": "control run loads the original web composition",
+      "ok": true,
+      "detail": "[\"@deepseek-ai/dsh-base\",\"@deepseek-ai/dsh-web-app\"]"
+    },
+    {
+      "name": "page loads from the non-loopback origin",
+      "ok": true,
+      "detail": "New Session | Plugins | Automation tasks | Workspaces | No sessions yet | Settings | Into the Unknown | Preview | Choose workspace | Standard mode | Choose a workspace to start | Preview Notice |  | DeepSeek Harness 0.2 is sti"
+    },
+    {
+      "name": "host configuration-editor entry is not exposed to the non-loopback page",
+      "ok": true,
+      "detail": "{\"count\":0,\"bodyHasLabel\":false}"
+    },
+    {
+      "name": "CONTROL: the remote page renders exactly one browser-local switch",
+      "ok": true,
+      "detail": "{\"count\":1,\"labels\":[\"Show coding view\"],\"state\":\"true\",\"disabled\":null,\"rows\":[{\"label\":\"Show coding view\",\"checked\":\"true\",\"disabled\":null}],\"dialogRows\":2}"
+    },
+    {
+      "name": "the switch accepts a click from the remote page",
+      "ok": true,
+      "detail": "CLICKED"
+    },
+    {
+      "name": "CONTROL: original composition does NOT persist a remote toggle",
+      "ok": true,
+      "detail": "[]\n"
+    },
+    {
+      "name": "CONTROL: the remote page keeps the value only in the page (local flip)",
+      "ok": true,
+      "detail": "{\"count\":1,\"labels\":[\"Show coding view\"],\"state\":\"false\",\"disabled\":null,\"rows\":[{\"label\":\"Show coding view\",\"checked\":\"false\",\"disabled\":null}],\"dialogRows\":2}"
+    },
+    {
+      "name": "no console exceptions, failures or protocol errors on the initial load",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "CONTROL: the remote toggle is lost on refresh",
+      "ok": true,
+      "detail": "{\"count\":1,\"labels\":[\"Show coding view\"],\"state\":\"true\",\"disabled\":null,\"rows\":[{\"label\":\"Show coding view\",\"checked\":\"true\",\"disabled\":null}],\"dialogRows\":2}"
+    },
+    {
+      "name": "loopback access to the same instance DOES expose the host editor entry",
+      "ok": true,
+      "detail": "{\"count\":1,\"bodyHasLabel\":true}"
+    },
+    {
+      "name": "CONTROL: loopback access does persist (same page, same instance)",
+      "ok": true,
+      "detail": "CLICKED - id: ui-settings\n  name: \"@deepseek-ai/dsh-client-ui-settings\"\n  config:\n    enabled: false\n"
+    },
+    {
+      "name": "the instance Host holds the persisted value after a restart",
+      "ok": true,
+      "detail": "{\"count\":2,\"labels\":[\"Show coding view\",\"Upload Session Log when using the official model API\"],\"state\":\"false\",\"disabled\":null,\"rows\":[{\"label\":\"Show coding view\",\"checked\":\"false\",\"disabled\":null},{\"label\":\"Upload Session Log when using the official model API\",\"checked\":\"true\",\"disabled\":null}],\"dialogRows\":2}"
+    },
+    {
+      "name": "CONTROL: the remote page cannot observe host state (memory mode)",
+      "ok": true,
+      "detail": "{\"count\":1,\"labels\":[\"Show coding view\"],\"state\":\"true\",\"disabled\":null,\"rows\":[{\"label\":\"Show coding view\",\"checked\":\"true\",\"disabled\":null}],\"dialogRows\":2}"
+    },
+    {
+      "name": "fence: /api from the trusted authority passes the Host/Origin fence (401 auth gate)",
+      "ok": true,
+      "detail": "{\"status\":401,\"setCookie\":false,\"body\":\"unauthorized\"}"
+    },
+    {
+      "name": "fence: /api from the loopback authority passes the fence",
+      "ok": true,
+      "detail": "{\"status\":401,\"setCookie\":false,\"body\":\"unauthorized\"}"
+    },
+    {
+      "name": "fence: /api with an untrusted Host is forbidden",
+      "ok": true,
+      "detail": "{\"status\":403,\"setCookie\":false,\"body\":\"forbidden\"}"
+    },
+    {
+      "name": "fence: /api with a cross-site Origin is forbidden",
+      "ok": true,
+      "detail": "{\"status\":403,\"setCookie\":false,\"body\":\"forbidden\"}"
+    },
+    {
+      "name": "auth: the root token mints the authority-bound cookie and redirects",
+      "ok": true,
+      "detail": "{\"status\":303,\"location\":\"./\",\"setCookie\":true,\"body\":\"\"}"
+    },
+    {
+      "name": "auth: the document without a token is unauthorized",
+      "ok": true,
+      "detail": "{\"status\":401,\"setCookie\":false,\"body\":\"dsh web authentication required; reopen the URL printed by dsh web.\\n\"}"
+    }
+  ],
+  "files": {
+    "profilePatchInitial": "[]\n",
+    "profilePatchAfterRemoteToggle": "[]\n",
+    "profilePatchAfterLoopbackToggle": "- id: ui-settings\n  name: \"@deepseek-ai/dsh-client-ui-settings\"\n  config:\n    enabled: false\n",
+    "profilePatchAfterRestart": "- id: ui-settings\n  name: \"@deepseek-ai/dsh-client-ui-settings\"\n  config:\n    enabled: false\n"
+  },
+  "root": "/tmp/dsh-e2e-control-uVB4n6",
+  "urls": {
+    "loopback": "http://127.0.0.1:43345/?token=Wr9iCuT4urMhHDYe2y2A-8rZmujieiwfs7vCxQMfCjo",
+    "remote": "http://dsh-proto.test:43345/?token=Wr9iCuT4urMhHDYe2y2A-8rZmujieiwfs7vCxQMfCjo",
+    "remoteAfterRestart": "http://dsh-proto.test:39159/?token=_EWFa622IAPAWIfiArFYz66QqUAlCulhqKnzHmrqCQU"
+  },
+  "serverStartLog": "dsh web: http://127.0.0.1:43345/?token=Wr9iCuT4urMhHDYe2y2A-8rZmujieiwfs7vCxQMfCjo\n",
+  "remoteHostEditorEntry": {
+    "count": 0,
+    "bodyHasLabel": false
+  },
+  "switchBefore": {
+    "count": 1,
+    "labels": [
+      "Show coding view"
+    ],
+    "state": "true",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "switchAfter": {
+    "count": 1,
+    "labels": [
+      "Show coding view"
+    ],
+    "state": "false",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "false",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "settingsDialogAfterToggle": "Preview Notice\n\nDeepSeek Harness 0.2 is still in preview, and many areas need continued improvement and refinement. We welcome feedback and suggestions from all developers and users. The new desktop app now targets a broad range of users, while developer-related advanced features can be enabled in the settings. DeepSeek Harness’s product features and plugin APIs are expected to continue rapid iteration and evolution, and will gradually stabilize over time.\n\nWe look forward to exploring the limits of intelligence together with users and developers around the world, building on open-source, reusable, and composable infrastructure. We welcome everyone to bring their ideas to life with DeepSeek Harness and participate in the community to enrich the plugin ecosystem.\n\nContinue\n===\nSettings\nGeneral\nModels\nBuilt-in plugins\nAgent presets\nClose\nLanguage\nEnglish\nAppearance\nLight\nDark\nSystem\nFont size\nOnly affects conversation content\n14\npx\nWork details\nChoose how much detail to show for tool calls\nDetailed\nWhen to Collapse Work Details\nChoose when to automatically collapse work details\nOn completion\nShow coding view\nShows trajectory, code diffs, and all Agent presets\nKeyboard shortcuts\n\nView and edit available shortcuts and input actions\n\nEdit shortcuts\nSend behavior while busy\nWhat Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior\nQueue\nPerformance & usage\nChoose how much performance and usage information to show\nDetailed\nCurrent version: 0.2.1-alpha.2",
+  "consoleOnInitialLoad": [],
+  "switchAfterReload": {
+    "count": 1,
+    "labels": [
+      "Show coding view"
+    ],
+    "state": "true",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "switchAfterReconnect": {
+    "count": 1,
+    "labels": [
+      "Show coding view"
+    ],
+    "state": "true",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "loopbackHostEditorEntry": {
+    "count": 1,
+    "bodyHasLabel": true
+  },
+  "switchLoopback": {
+    "count": 2,
+    "labels": [
+      "Show coding view",
+      "Upload Session Log when using the official model API"
+    ],
+    "state": "true",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "true",
+        "disabled": null
+      },
+      {
+        "label": "Upload Session Log when using the official model API",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "switchLoopbackAfterRestart": {
+    "count": 2,
+    "labels": [
+      "Show coding view",
+      "Upload Session Log when using the official model API"
+    ],
+    "state": "false",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "false",
+        "disabled": null
+      },
+      {
+        "label": "Upload Session Log when using the official model API",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "switchAfterRestart": {
+    "count": 1,
+    "labels": [
+      "Show coding view"
+    ],
+    "state": "true",
+    "disabled": null,
+    "rows": [
+      {
+        "label": "Show coding view",
+        "checked": "true",
+        "disabled": null
+      }
+    ],
+    "dialogRows": 2
+  },
+  "fence": {
+    "trustedNoCookie": {
+      "status": 401,
+      "setCookie": false,
+      "body": "unauthorized"
+    },
+    "loopbackNoCookie": {
+      "status": 401,
+      "setCookie": false,
+      "body": "unauthorized"
+    },
+    "evilHost": {
+      "status": 403,
+      "setCookie": false,
+      "body": "forbidden"
+    },
+    "evilOrigin": {
+      "status": 403,
+      "setCookie": false,
+      "body": "forbidden"
+    },
+    "indexToken": {
+      "status": 303,
+      "location": "./",
+      "setCookie": true,
+      "body": ""
+    },
+    "indexNoToken": {
+      "status": 401,
+      "setCookie": false,
+      "body": "dsh web authentication required; reopen the URL printed by dsh web.\n"
+    }
+  },
+  "consoleAfterAllSteps": [
+    "Network.loadingFailed {\"requestId\":\"1940374.89\",\"timestamp\":954245.161886,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}",
+    "Network.loadingFailed {\"requestId\":\"1940374.114\",\"timestamp\":954248.163535,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}"
+  ],
+  "consoleFullTail": [
+    "Network.loadingFailed {\"requestId\":\"1940374.89\",\"timestamp\":954245.161886,\"type\":\"EventSource\",\"errorText\":\"net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"canceled\":false}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING\",\"timestamp\":1791620804669.899,\"url\":\"http://127.0.0.1:43345/plugins/events\",\"networkRequestId\":\"1940374.89\"}}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43345/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791620804975.752,\"url\":\"http://127.0.0.1",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43345/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791620805565.39,\"url\":\"http://127.0.0.1:",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"WebSocket connection to 'ws://127.0.0.1:43345/api/remote.mux' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791620807437.678,\"url\":\"http://127.0.0.1",
+    "Network.loadingFailed {\"requestId\":\"1940374.114\",\"timestamp\":954248.163535,\"type\":\"EventSource\",\"errorText\":\"net::ERR_CONNECTION_REFUSED\",\"canceled\":false}",
+    "Log.entryAdded {\"entry\":{\"source\":\"network\",\"level\":\"error\",\"text\":\"Failed to load resource: net::ERR_CONNECTION_REFUSED\",\"timestamp\":1791620807671.55,\"url\":\"http://127.0.0.1:43345/plugins/events\",\"networkRequestId\":\"1940374.114\"}}"
+  ],
+  "settingsDialogText": "Preview Notice\n\nDeepSeek Harness 0.2 is still in preview, and many areas need continued improvement and refinement. We welcome feedback and suggestions from all developers and users. The new desktop app now targets a broad range of users, while developer-related advanced features can be enabled in the settings. DeepSeek Harness’s product features and plugin APIs are expected to continue rapid iteration and evolution, and will gradually stabilize over time.\n\nWe look forward to exploring the limits of intelligence together with users and developers around the world, building on open-source, reusable, and composable infrastructure. We welcome everyone to bring their ideas to life with DeepSeek Harness and participate in the community to enrich the plugin ecosystem.\n\nContinue\n===\nSettings\nGeneral\nModels\nBuilt-in plugins\nAgent presets\nClose\nLanguage\nEnglish\nAppearance\nLight\nDark\nSystem\nFont size\nOnly affects conversation content\n14\npx\nWork details\nChoose how much detail to show for tool calls\nDetailed\nWhen to Collapse Work Details\nChoose when to automatically collapse work details\nOn completion\nShow coding view\nShows trajectory, code diffs, and all Agent presets\nKeyboard shortcuts\n\nView and edit available shortcuts and input actions\n\nEdit shortcuts\nSend behavior while busy\nWhat Enter and the Send button do while the agent is running; Cmd/Ctrl+Enter uses the other behavior\nQueue\nPerformance & usage\nChoose how much performance and usage information to show\nDetailed\nCurrent version: 0.2.1-alpha.2",
+  "passed": 19,
+  "failed": []
+}

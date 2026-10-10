@@ -1,0 +1,45 @@
+{
+  "name": "@dsh-local-overlay/dsh-client-ui-settings",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Version-bound replacement for the DSH settings provider: keeps Host-backed settings persistence on non-loopback (authenticated) pages.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "0.2.1-alpha.2"
+  },
+  "overlay": {
+    "baselinePackage": "@deepseek-ai/dsh-client-ui-settings@0.2.1-alpha.2",
+    "baselineCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+    "provenance": "../../provenance.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "LICENSE",
+    "NOTICE"
+  ]
+}

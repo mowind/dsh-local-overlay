@@ -1,0 +1,36 @@
+{
+  "name": "@dsh-local-overlay/web-composition",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fixed-version Web composition layer: the dsh-web-app roster for DSH 0.2.1-alpha.2 with the settings provider row pointing at our own settings package.",
+  "type": "module",
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml",
+        "./presets/standard.patch.yml",
+        "./presets/ptc.patch.yml",
+        "./presets/minimal.patch.yml",
+        "./presets/cordis.patch.yml"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": "0.2.1-alpha.2"
+  },
+  "overlay": {
+    "baselinePackage": "@deepseek-ai/dsh-web-app@0.2.1-alpha.2",
+    "baselineCommit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+    "provenance": "../../provenance.json"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "presets/standard.patch.yml",
+    "presets/ptc.patch.yml",
+    "presets/minimal.patch.yml",
+    "presets/cordis.patch.yml",
+    "LICENSE",
+    "NOTICE"
+  ]
+}

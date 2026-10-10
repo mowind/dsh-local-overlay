@@ -1,0 +1,164 @@
+{
+  "schema": "dsh-local-overlay/provenance@1",
+  "note": "Every recorded file is a copy of the DSH baseline build, byte-identical except the entries marked modified, whose full diff against that same baseline copy is recorded in expectedDiff. tools/verify-artifacts.mjs recomputes both sha256 values and that diff against the installed baseline and runs as a preflight before the composition is switched.",
+  "baseline": {
+    "package": "@deepseek-ai/dsh",
+    "version": "0.2.1-alpha.2",
+    "commit": "d743267388641bc76f17c45ce8b4c231aed1d32c",
+    "repository": "https://github.com/deepseek-ai/deepseek-harness",
+    "license": "MIT",
+    "copyright": "Copyright (c) 2026 DeepSeek"
+  },
+  "upstreamSources": {
+    "@deepseek-ai/dsh-client-ui-settings": "packages/client/ui-settings of the baseline build (MIT, Copyright (c) 2026 DeepSeek)",
+    "@deepseek-ai/dsh-web-app": "the Web app package of the baseline build (MIT, Copyright (c) 2026 DeepSeek)"
+  },
+  "files": [
+    {
+      "path": "packages/dsh-client-ui-settings/LICENSE",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/LICENSE",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "upstreamSha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/client.js",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/client.js",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "modified",
+      "sha256": "7d9b44eb67fd8abf6643712c7efefd0d44dde64a2adef71a78ead8ad3c5c4dc0",
+      "upstreamSha256": "2ac7f186165c5a8ec2cd90045cf74693e5d3518ec90cd429951360d79754aa94",
+      "expectedDiff": "@@ -1,5 +1,5 @@\n window.__ModuleLoader__.load({\n-\tid: \"@deepseek-ai/dsh-client-ui-settings\",\n+\tid: \"@dsh-local-overlay/dsh-client-ui-settings\",\n \tfactory: (require) => {\n \t\tvar module = { exports: {} };\n \t\tvar exports = module.exports;\n@@ -1506,7 +1506,12 @@\n \t\t*/\n \t\tfunction apply(ctx) {\n \t\t\tconst schema = new SettingsSchemaService(ctx);\n-\t\t\tconst persistence = ctx.remote.$host.isLoopback ? \"host\" : \"memory\";\n+\t\t\t/* dsh-local-overlay, version-bound replacement: the upstream provider keys\n+\t\t\t* persistence off the page origin, so any non-loopback page keeps every\n+\t\t\t* preference process-local. Keep the Host-backed persistence for every\n+\t\t\t* authenticated page; `remote.$host.isLoopback` itself is untouched, so\n+\t\t\t* origin facts stay truthful and the request fence stays unchanged. */\n+\t\t\tconst persistence = \"host\";\n \t\t\tconst mirror = new SettingsDescribeMirror(ctx, persistence);\n \t\t\tctx.effect(() => {\n \t\t\t\tconst disposers = [ctx.remote.$on(\"settings/document-updated\", () => {\n"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/index.js",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/index.js",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "9c2408bebe9024bdd6dfef91e192753851da3105b913b704132e309e90144c8b",
+      "upstreamSha256": "9c2408bebe9024bdd6dfef91e192753851da3105b913b704132e309e90144c8b"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/config-form-types.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/config-form-types.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "273c31bde5dee13ae31df690f4a6b13e87f6404de6aa841c7c5bd59df3235805",
+      "upstreamSha256": "273c31bde5dee13ae31df690f4a6b13e87f6404de6aa841c7c5bd59df3235805"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/config-form.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/config-form.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "00b232c6b52a1399372907d164a9a58454cbb84c67e353cbb14a89155f8a1dd9",
+      "upstreamSha256": "00b232c6b52a1399372907d164a9a58454cbb84c67e353cbb14a89155f8a1dd9"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/contract/slots.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/contract/slots.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "2f7d23b648e50ddd3d71bdd3cb8863c06598533bebfb17538c3a8b5f2da453b4",
+      "upstreamSha256": "2f7d23b648e50ddd3d71bdd3cb8863c06598533bebfb17538c3a8b5f2da453b4"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/developer-tools.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/developer-tools.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "a7266b97eb3eaf36ca1717701d986fdf967bd533c496890459097f2cfca9000a",
+      "upstreamSha256": "a7266b97eb3eaf36ca1717701d986fdf967bd533c496890459097f2cfca9000a"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/index.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/index.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "47f8ac4373d8416045022ae5bd4b6b27a85762d964d6bc4f27e0e85dfb1fe7f1",
+      "upstreamSha256": "47f8ac4373d8416045022ae5bd4b6b27a85762d964d6bc4f27e0e85dfb1fe7f1"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/schema.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/schema.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "4f278545a304de24aa53389dbebc113f9771a90f6bd7b05d327c72d54819b1df",
+      "upstreamSha256": "4f278545a304de24aa53389dbebc113f9771a90f6bd7b05d327c72d54819b1df"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/client/settings-mirror.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/client/settings-mirror.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "c6289a28dbe2005bf242185189f487aac6170df5e675d35edaddd3950390954b",
+      "upstreamSha256": "c6289a28dbe2005bf242185189f487aac6170df5e675d35edaddd3950390954b"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/developer-tools-settings.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/developer-tools-settings.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "d6066fc14c26ab013e1c1935a6f0acb5ed434b2b361270634b482f71ab227113",
+      "upstreamSha256": "d6066fc14c26ab013e1c1935a6f0acb5ed434b2b361270634b482f71ab227113"
+    },
+    {
+      "path": "packages/dsh-client-ui-settings/lib/types/index.d.ts",
+      "upstream": "node_modules/@deepseek-ai/dsh-client-ui-settings/lib/types/index.d.ts",
+      "upstreamPackage": "@deepseek-ai/dsh-client-ui-settings",
+      "kind": "verbatim",
+      "sha256": "0edaf2306c9305d7f1fa3a8a91693f06340b2c512e458c0b9a3276a6fb9fd030",
+      "upstreamSha256": "0edaf2306c9305d7f1fa3a8a91693f06340b2c512e458c0b9a3276a6fb9fd030"
+    },
+    {
+      "path": "packages/dsh-web-composition/LICENSE",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/LICENSE",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "verbatim",
+      "sha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+      "upstreamSha256": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be"
+    },
+    {
+      "path": "packages/dsh-web-composition/cordis.patch.yml",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "modified",
+      "sha256": "0431eba9548525acbf051fe51d274b9cfc7147afc0fcdac4594f22e805cd3578",
+      "upstreamSha256": "3534d03deddc97d81d1490c5fedff3ab32144e5f2906877721032f6e4fde13c2",
+      "expectedDiff": "@@ -299,7 +299,7 @@\n       name: '@deepseek-ai/dsh-client-ui-sidebar-files'\n \n     - id: ui-settings\n-      name: '@deepseek-ai/dsh-client-ui-settings'\n+      name: '@dsh-local-overlay/dsh-client-ui-settings'\n \n     - id: ui-settings-general\n       name: '@deepseek-ai/dsh-client-ui-settings-general'\n"
+    },
+    {
+      "path": "packages/dsh-web-composition/presets/cordis.patch.yml",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/presets/cordis.patch.yml",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "verbatim",
+      "sha256": "c508cd9bad74927ba079d6f42a08f504adf15f21968e0b8330813347a86f9dd3",
+      "upstreamSha256": "c508cd9bad74927ba079d6f42a08f504adf15f21968e0b8330813347a86f9dd3"
+    },
+    {
+      "path": "packages/dsh-web-composition/presets/minimal.patch.yml",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/presets/minimal.patch.yml",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "verbatim",
+      "sha256": "71ef887f43d8a37931ba3b014e5b116f79018af873d06625fb22e280a23c1dfc",
+      "upstreamSha256": "71ef887f43d8a37931ba3b014e5b116f79018af873d06625fb22e280a23c1dfc"
+    },
+    {
+      "path": "packages/dsh-web-composition/presets/ptc.patch.yml",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/presets/ptc.patch.yml",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "verbatim",
+      "sha256": "e2d47413d64234cd4fe454da67826f72c6f9456e71ffc7a0d564c00602bb58a4",
+      "upstreamSha256": "e2d47413d64234cd4fe454da67826f72c6f9456e71ffc7a0d564c00602bb58a4"
+    },
+    {
+      "path": "packages/dsh-web-composition/presets/standard.patch.yml",
+      "upstream": "node_modules/@deepseek-ai/dsh-web-app/presets/standard.patch.yml",
+      "upstreamPackage": "@deepseek-ai/dsh-web-app",
+      "kind": "verbatim",
+      "sha256": "d01a66aa66f001dcb559143157c81cf6c4554bcd8f3e1240e8287a27c85b1eab",
+      "upstreamSha256": "d01a66aa66f001dcb559143157c81cf6c4554bcd8f3e1240e8287a27c85b1eab"
+    }
+  ]
+}
