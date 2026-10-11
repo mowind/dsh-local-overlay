@@ -1,5 +1,5 @@
 import { spawn, execFileSync } from "node:child_process";
-import { readFile, writeFile, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, mkdtemp, readdir, rm, stat, chmod } from "node:fs/promises";
 import { cpSync, existsSync, realpathSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import http from "node:http";
@@ -16,6 +16,49 @@ const FORK_PACKAGE = OVERLAY_SCOPE + "/dsh-client-ui-settings";
 const TEST_CREDENTIAL_REF = "DSH_E2E_TEST_CREDENTIAL";
 /* A throwaway bundle layer installed while the replacement is active: the rollback has to leave it alone. */
 const UNRELATED_LAYER = OVERLAY_SCOPE + "/e2e-unrelated-layer";
+/* The provider, its models and its TEST-ONLY credentials that the ORIGINAL provider page creates, edits and
+   deletes through the remote origin (issue #4). None of these values is a real secret; they are literals of
+   this file and they only ever exist inside the throwaway DSH_HOME of one run. The route is lower case and
+   dash separated because the page's own field validation rejects everything else. */
+const PAGE_PROVIDER = "e2e-page-gateway";
+const PAGE_PROVIDER_DISPLAY = "E2E Page Gateway";
+const PAGE_PROVIDER_DISPLAY_2 = "E2E Page Gateway v2";
+const PAGE_PROVIDER_STALE = "E2E Page Gateway other writer";
+const PAGE_PROVIDER_BLOCKED = "E2E Page Gateway write blocked";
+const PAGE_PROVIDER_PARTIAL = "E2E Page Gateway key pending";
+const PAGE_PROVIDER_BASE = "https://e2e-page.test/v1";
+const PAGE_PROVIDER_BASE_2 = "https://e2e-page.test/v2";
+const PAGE_MODEL = "e2e-page-model-alpha";
+const PAGE_MODEL_NAME = "E2E Page Alpha";
+const PAGE_MODEL_2 = "e2e-page-model-beta";
+const PAGE_MODEL_NAME_2 = "E2E Page Beta";
+/* The credential reference the PAGE derives from the route: <ROUTE upcased, non-alphanumeric to underscore>_API_KEY. */
+const PAGE_KEY_REF = "E2E_PAGE_GATEWAY_API_KEY";
+const PAGE_KEY_1 = "e2e-page-key-1111";
+const PAGE_KEY_2 = "e2e-page-key-2222";
+const PAGE_KEY_3 = "e2e-page-key-3333";
+const PAGE_KEY_ROTATED = "e2e-page-key-rotated";
+/* A second provider, created and then deleted again while the first one stays configured, so the stage can show
+   that a deletion touches nothing but its own provider. */
+const PAGE_PROVIDER_2 = "e2e-page-relay";
+const PAGE_PROVIDER_2_DISPLAY = "E2E Page Relay";
+const PAGE_PROVIDER_2_BASE = "https://e2e-relay.test/v1";
+const PAGE_KEY_REF_2 = "E2E_PAGE_RELAY_API_KEY";
+const PAGE_KEY_2_OF_2 = "e2e-page-relay-key-4444";
+const PAGE_SECRETS = [PAGE_KEY_1, PAGE_KEY_2, PAGE_KEY_3, PAGE_KEY_ROTATED, PAGE_KEY_2_OF_2];
+/* The refs block of the credential store is the only place a stored key can be observed at all. */
+const credentialRefsOf = (text) => {
+  const marker = text.lastIndexOf("\nrefs:");
+  const block = marker === -1 ? "" : text.slice(marker);
+  const found = {};
+  for (const line of block.split("\n")) {
+    const match = /^[ \t]+([A-Za-z0-9_]+):[ \t]*(\S+)[ \t]*$/.exec(line);
+    if (match !== null) found[match[1]] = match[2];
+  }
+  return found;
+};
+/* Any test secret found in a piece of text the page produced. Always expected to be empty. */
+const secretsIn = (text) => PAGE_SECRETS.filter((secret) => String(text).indexOf(secret) !== -1);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 /* The two server-push transports a loaded page holds open, and the authority of a transport URL.
    Every console/network tolerance below is bound to a connection that already existed when the stage
@@ -143,6 +186,22 @@ const HOST_EDITOR_PROBE = "(() => { const text = /open configuration file|打开
 const SHELL_PROBE = "(document.querySelectorAll(\"button\").length > 3 && document.body.innerText.slice(0, 200))";
 const SETTINGS_TRIGGER = "(() => { const b = Array.from(document.querySelectorAll(\"button\")).find((e) => /^(settings|设置)/i.test((e.getAttribute(\"aria-label\") || e.innerText || \"\").trim())); if (!b) return \"NO_TRIGGER\"; b.click(); return \"OPENED\"; })()";
 
+/* A one-off dump of the provider section's own buttons and key fields, printed only when a row a read expected
+   is not there: the page draws a card already expanded in some states, and that card offers no Edit button. */
+const MODELS_CARDS = [
+  "(() => {",
+  " const vis = (e) => !!e && e.offsetParent !== null;",
+  " const txt = (e) => (e.innerText || e.textContent || \"\").replace(/\\s+/g, \" \").trim();",
+  " const buttons = Array.from(document.querySelectorAll(\"button\")).filter(vis).map((b) => (b.getAttribute(\"aria-label\") || \"-\") + \" :: \" + txt(b).slice(0, 30));",
+  " const keys = Array.from(document.querySelectorAll('[aria-label=\"API key\"]')).map((input) => ({ visible: vis(input), value: input.value, placeholder: input.getAttribute(\"placeholder\"), card: txt(input.parentElement && input.parentElement.parentElement ? input.parentElement.parentElement : input).slice(0, 160) }));",
+  " const dialogs = Array.from(document.querySelectorAll(\"[role=dialog]\")).filter(vis);",
+  " return JSON.stringify({ buttons, keys, section: dialogs.length ? txt(dialogs[dialogs.length - 1]).slice(0, 900) : txt(document.body).slice(0, 300) });",
+  "})()",
+].join(" ");
+/* Used only when the Models section cannot be reached: it reports what the document actually offered, so a
+   failure here is debuggable from the run log instead of by guesswork. */
+const MODELS_DIAG = "(() => { const vis = (e) => !!e && e.offsetParent !== null; const txt = (e) => (e.innerText || e.textContent || \"\").replace(/\\s+/g, \" \").trim(); const dialogs = Array.from(document.querySelectorAll(\"[role=dialog]\")).map((d) => ({ visible: vis(d), text: txt(d).slice(0, 200) })); const navish = Array.from(document.querySelectorAll(\"nav button, [role=tab], [role=navigation] button, [role=menuitem]\")).filter(vis).map((b) => ({ text: txt(b).slice(0, 40), aria: b.getAttribute(\"aria-label\"), role: b.getAttribute(\"role\") })); const buttons = Array.from(document.querySelectorAll(\"button\")).filter(vis).map((b) => txt(b).slice(0, 30)); return JSON.stringify({ dialogs, navish, buttons: buttons.slice(0, 60), body: txt(document.body).slice(0, 300) }); })()";
+
 async function waitFor(cdp, expression, label, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
   let last;
@@ -150,10 +209,31 @@ async function waitFor(cdp, expression, label, timeoutMs = 25000) {
   throw new Error("timeout waiting for " + label + " (last=" + JSON.stringify(last) + ")");
 }
 
+/* Is the settings panel on screen? It is a dialog of its own, so it is recognised by its own navigation
+   entries rather than by any dialog being present. */
+const SETTINGS_PANEL_PROBE = "(Array.from(document.querySelectorAll(\"[role=dialog]\")).some((d) => d.offsetParent !== null && /Built-in plugins|Agent presets/.test(d.innerText || \"\")))";
+
+/* Puts an already-open settings panel back on General. The switch stages read the General section's own row, and
+   a document that survived a transport interruption can still show the panel an earlier stage walked into the
+   Models section. General is also the section a newly opened panel shows, so a panel that is reopened and a
+   panel that is reset end up in the same place. */
+const SETTINGS_GENERAL = "(() => { const b = Array.from(document.querySelectorAll(\"button\")).find((e) => /^(general|通用)$/i.test((e.getAttribute(\"aria-label\") || e.innerText || \"\").trim())); if (!b) return \"no-general-entry\"; b.click(); return \"clicked\"; })()";
+
+/* The settings panel is a dialog of its own, and whether a second dialog (the first-run card that asks for an
+   official key) is on screen depends on what the profile already holds - a profile with a configured key no
+   longer draws it. So the wait is for the count to RISE by opening the panel, not for a fixed total. If the
+   panel is already up (a document that never went away), the trigger is not pressed again - pressing it blind
+   can only close the panel it is meant to show - and the panel is reset to General instead. */
 async function openSettings(cdp, shot) {
   await waitFor(cdp, SHELL_PROBE, "app shell");
-  await cdp.eval(SETTINGS_TRIGGER);
-  await waitFor(cdp, "document.querySelectorAll(\"[role=dialog]\").length > 1", "settings dialog");
+  if ((await cdp.eval(SETTINGS_PANEL_PROBE)) === true) {
+    await cdp.eval(SETTINGS_GENERAL);
+    await sleep(900);
+  } else {
+    const dialogsBefore = await cdp.eval("document.querySelectorAll(\"[role=dialog]\").length");
+    await cdp.eval(SETTINGS_TRIGGER);
+    await waitFor(cdp, "document.querySelectorAll(\"[role=dialog]\").length > " + JSON.stringify(dialogsBefore) + " || " + SETTINGS_PANEL_PROBE, "settings dialog");
+  }
   await sleep(1500);
   if (shot) await cdp.screenshot(shot);
 }
@@ -361,6 +441,276 @@ function rpcFor(instance) {
   const port = Number(url.port);
   const token = url.search.slice("?token=".length);
   return (method, args) => callRpc(port, token, method, args);
+}
+
+/* ------------------------------------------------------------------------------------------------------
+   The page-side driver for the ORIGINAL provider page (issue #4). Every method is a thin wrapper around
+   the page's own DOM: it clicks the page's own buttons, focuses the page's own inputs and reads back what
+   the page itself rendered. It knows NOTHING about persistence - the harness proves that separately, from
+   the page's own RPC bodies (read out of the CDP network log by shape) and from the files on disk.
+   Two page facts shape this driver:
+     * The page's controlled text inputs ignore synthetic input/change events (a dispatched event changes
+       the DOM value but not the component state, so the next render wipes it). Text is therefore typed
+       through the browser's own input pipeline; selects do react to value + change.
+     * The page embeds the CURRENT display name in its own aria-labels, so a provider is always addressed
+       by its ROUTE, never by a display name captured earlier.
+   ------------------------------------------------------------------------------------------------------ */
+const PAGE_DRIVER = [
+  "(function () {",
+  "  var visible = function (element) { return !!element && element.offsetParent !== null; };",
+  "  var list = function (selector, root) { return Array.prototype.slice.call((root || document).querySelectorAll(selector)); };",
+  "  var trimmed = function (value) { return (value || \"\").replace(/\\s+/g, \" \").trim(); };",
+  "  var buttonText = function (text, root) { return list(\"button\", root).filter(visible).filter(function (button) { return trimmed(button.innerText) === text; })[0]; };",
+  "  var dialog = function () { return list(\"[role=dialog]\").filter(visible).pop(); };",
+  "  /* A confirmation dialog opens OVER the settings panel, so the section is read from the dialog that holds",
+  "     the section itself (the one with the page's own Add action), falling back to the last visible dialog. */",
+  "  var sectionDialog = function () {",
+  "    var dialogs = list(\"[role=dialog]\").filter(visible);",
+  "    for (var index = dialogs.length - 1; index >= 0; index -= 1) {",
+  "      if (buttonText(\"Add model provider\", dialogs[index])) return dialogs[index];",
+  "    }",
+  "    return dialogs.pop() || null;",
+  "  };",
+  "  var field = function (label, root) { return list(\"[aria-label=\" + JSON.stringify(label) + \"]\", root).filter(visible)[0]; };",
+  "  var addCard = function () {",
+  "    var tab = list(\"[role=tab]\").filter(visible)[0];",
+  "    if (!tab) return null;",
+  "    var node = tab;",
+  "    while (node && node !== document.body) {",
+  "      if (list(\"button\", node).filter(visible).some(function (button) { return trimmed(button.innerText) === \"Cancel\"; })) return node;",
+  "      node = node.parentElement;",
+  "    }",
+  "    return null;",
+  "  };",
+  "  var editCard = function (route) {",
+  "    var edit = list(\"button\").filter(visible).filter(function (button) {",
+  "      var label = button.getAttribute(\"aria-label\") || \"\";",
+  "      return label.indexOf(\"Edit \") === 0 && label.indexOf(\"(\" + route + \")\") !== -1;",
+  "    })[0];",
+  "    if (!edit) return null;",
+  "    var node = edit;",
+  "    while (node && node !== document.body) {",
+  "      if (list(\"button\", node).filter(visible).some(function (button) { return trimmed(button.innerText) === \"Apply\"; })) return node;",
+  "      node = node.parentElement;",
+  "    }",
+  "    return null;",
+  "  };",
+  "  var openDetails = function (scope) {",
+  "    var details = scope.querySelector(\"details\");",
+  "    if (!details) return false;",
+  "    if (!details.open) { var summary = details.querySelector(\"summary\"); if (summary) summary.click(); }",
+  "    return details.open === true;",
+  "  };",
+  "  var describe = function (scope) {",
+  "    return {",
+  "      text: trimmed(scope.innerText).slice(0, 700),",
+  "      buttons: list(\"button\", scope).filter(visible).map(function (button) { return { label: trimmed(button.innerText) || (button.getAttribute(\"aria-label\") || \"?\"), disabled: button.disabled === true }; }),",
+  "      fields: list(\"input,select,textarea\", scope).filter(visible).map(function (element) { return { label: element.getAttribute(\"aria-label\") || element.tagName, value: element.value, disabled: element.disabled === true, placeholder: element.getAttribute(\"placeholder\") || \"\" }; }),",
+  "      paragraphs: list(\"p\", scope).filter(visible).map(function (p) { return trimmed(p.innerText).slice(0, 240); }).filter(function (text) { return text.length > 0; }),",
+  "      detailsOpen: scope.querySelector(\"details\") ? scope.querySelector(\"details\").open === true : false",
+  "    };",
+  "  };",
+  "  var focusIn = function (scope, label) {",
+  "    if (!scope) return \"no-card\";",
+  "    var element = field(label, scope);",
+  "    if (!element) return \"no-field\";",
+  "    element.focus();",
+  "    if (element.select && element.tagName !== \"SELECT\") element.select();",
+  "    return document.activeElement === element ? \"focused\" : \"blocked\";",
+  "  };",
+  "  var pickIn = function (scope, label, value) {",
+  "    if (!scope) return \"no-card\";",
+  "    var element = field(label, scope);",
+  "    if (!element) return \"no-field\";",
+  "    element.value = value;",
+  "    element.dispatchEvent(new Event(\"change\", { bubbles: true }));",
+  "    return \"picked:\" + element.value;",
+  "  };",
+  "  var saveIn = function (scope, text) {",
+  "    if (!scope) return { state: \"no-card\" };",
+  "    var button = list(\"button\", scope).filter(visible).filter(function (candidate) { return trimmed(candidate.innerText) === text; })[0];",
+  "    if (!button) return { state: \"no-target\" };",
+  "    if (button.disabled) return { state: \"disabled\" };",
+  "    button.click();",
+  "    return { state: \"clicked\" };",
+  "  };",
+  "  var providerRows = function () {",
+  "    var scope = sectionDialog();",
+  "    if (!scope) return [];",
+  "    return list(\"button\", scope).filter(visible).filter(function (button) { return (button.getAttribute(\"aria-label\") || \"\").indexOf(\"Edit \") === 0; }).map(function (edit) {",
+  "      var label = edit.getAttribute(\"aria-label\") || \"\";",
+  "      var match = /^Edit (.*) \\(([^()]+)\\)$/.exec(label);",
+  "      if (!match) return null;",
+  "      var head = edit.parentElement && edit.parentElement.parentElement ? edit.parentElement.parentElement : edit;",
+  "      var container = head.parentElement || head;",
+  "      var keyField = list(\"[aria-label=\" + JSON.stringify(\"API key\") + \"]\", container).filter(visible)[0];",
+  "      var deleteLabel = \"Delete \" + match[1] + \" (\" + match[2] + \")\";",
+  "      return {",
+  "        route: match[2],",
+  "        displayName: match[1],",
+  "        custom: trimmed(container.innerText).indexOf(\"Custom\") !== -1,",
+  "        keyConfigured: list(\"[role=img]\", container).filter(visible).some(function (dot) { return (dot.getAttribute(\"aria-label\") || \"\") === \"API key configured\"; }),",
+  "        keyPlaceholder: keyField ? (keyField.getAttribute(\"placeholder\") || \"\") : \"\",",
+  "        keyValue: keyField ? keyField.value : \"\",",
+  "        editorOpen: list(\"button\", container).filter(visible).some(function (button) { return trimmed(button.innerText) === \"Apply\"; }),",
+  "        hasDelete: list(\"button\", container).filter(visible).some(function (button) { return (button.getAttribute(\"aria-label\") || \"\").indexOf(deleteLabel) === 0; })",
+  "      };",
+  "    }).filter(function (row) { return row !== null; });",
+  "  };",
+  "  window.__e2ePage = {",
+  "    start: function () {",
+  "      var trigger = list(\"button\").filter(visible).filter(function (button) {",
+  "        var label = ((button.getAttribute(\"aria-label\") || \"\") + \" \" + trimmed(button.innerText)).trim();",
+  "        return /^(settings|设置)/i.test(label);",
+  "      })[0];",
+  "      if (!trigger) return \"no-settings-trigger\";",
+  "      trigger.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    dialogText: function () { var scope = dialog(); return scope ? trimmed(scope.innerText) : \"\"; },",
+  "    bodyText: function () { return trimmed(document.body.innerText); },",
+  "    hasText: function (text) { return trimmed(document.body.innerText).indexOf(text) !== -1; },",
+  "    openModels: function () {",
+  "      /* The section entry is looked up in the whole document, the way a person finds it in the sidebar: the",
+  "         settings panel is not always the topmost dialog (the onboarding card can sit above it). */",
+  "      if (!dialog()) return \"no-dialog\";",
+  "      var entry = buttonText(\"Models\") || buttonText(\"模型\");",
+  "      if (!entry) return \"no-models-entry\";",
+  "      entry.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    dismiss: function () {",
+  "      /* Both labels the onboarding card can carry; it can also come back over the section after it opens. */",
+  "      var roots = list(\"[role=dialog]\").filter(visible);",
+  "      var scopes = roots.length > 0 ? roots : [document];",
+  "      var clicked = 0;",
+  "      [\"Continue\", \"Configure later\"].forEach(function (label) {",
+  "        var button = null;",
+  "        scopes.forEach(function (scope) { if (!button) button = buttonText(label, scope === document ? undefined : scope); });",
+  "        if (button) { button.click(); clicked += 1; }",
+  "      });",
+  "      return clicked === 0 ? \"none\" : \"clicked-\" + clicked;",
+  "    },",
+  "    providerRows: providerRows,",
+  "    providerRow: function (route) { var rows = providerRows().filter(function (row) { return row.route === route; }); return rows.length === 0 ? null : rows[0]; },",
+  "    rowButton: function (route, prefix) {",
+  "      var scope = dialog();",
+  "      var button = list(\"button\", scope).filter(visible).filter(function (candidate) {",
+  "        var label = candidate.getAttribute(\"aria-label\") || \"\";",
+  "        return label.indexOf(prefix + \" \") === 0 && label.indexOf(\"(\" + route + \")\") !== -1;",
+  "      })[0];",
+  "      if (!button) return \"no-target\";",
+  "      button.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    addProvider: function () { var button = buttonText(\"Add model provider\", dialog()) || buttonText(\"Add model provider\"); if (!button) return \"no-target\"; button.click(); return \"clicked\"; },",
+  "    customTab: function () { var tabs = list(\"[role=tab]\", dialog()).filter(visible); if (tabs.length === 0) return \"no-tabs\"; tabs[tabs.length - 1].click(); return \"clicked\"; },",
+  "    addCard: addCard,",
+  "    editCard: editCard,",
+  "    addDump: function () { var scope = addCard(); return scope ? describe(scope) : \"no-card\"; },",
+  "    editDump: function (route) { var scope = editCard(route); return scope ? describe(scope) : \"no-card\"; },",
+  "    addDetails: function () { var scope = addCard(); if (!scope) return \"no-card\"; return openDetails(scope) ? \"open\" : \"no-details\"; },",
+  "    editDetails: function (route) { var scope = editCard(route); if (!scope) return \"no-card\"; return openDetails(scope) ? \"open\" : \"no-details\"; },",
+  "    focusAdd: function (label) { return focusIn(addCard(), label); },",
+  "    focusEdit: function (route, label) { return focusIn(editCard(route), label); },",
+  "    pickAdd: function (label, value) { return pickIn(addCard(), label, value); },",
+  "    pickEdit: function (route, label, value) { return pickIn(editCard(route), label, value); },",
+  "    addModel: function (route) { var scope = route ? editCard(route) : addCard(); if (!scope) return \"no-card\"; var button = buttonText(\"Add model\", scope); if (!button) return \"no-target\"; button.click(); return \"clicked\"; },",
+  "    saveAdd: function (text) { return saveIn(addCard(), text); },",
+  "    saveEdit: function (route) { return saveIn(editCard(route), \"Apply\"); },",
+  "    cancel: function (route) { var scope = route ? editCard(route) : addCard(); if (!scope) return \"no-card\"; var button = buttonText(\"Cancel\", scope); if (!button) return \"no-target\"; button.click(); return \"clicked\"; },",
+  "    /* The confirmation dialog's confirm button carries the provider name as its own text (\"Delete <name> (<route>)\")",
+  "       and has no aria-label of its own, unlike the row button: click it by its text, scoped to the dialog. */",
+  "    confirmDelete: function () { var scope = dialog(); if (!scope) return \"no-dialog\"; var button = list(\"button\", scope).filter(visible).filter(function (candidate) { return /^Delete\\b/.test(trimmed(candidate.innerText)); })[0]; if (!button) return \"no-target\"; button.click(); return \"clicked\"; },",
+  "    cardButton: function (text, route) { var scope = route ? editCard(route) : addCard(); if (!scope) return \"no-card\"; var button = list(\"button\", scope).filter(visible).filter(function (candidate) { return trimmed(candidate.innerText) === text; })[0]; return button ? (button.disabled === true ? \"disabled\" : \"enabled\") : \"no-target\"; },",
+  "    modelLabels: function (route) { var scope = route ? editCard(route) : addCard(); return scope ? list(\"input\", scope).filter(visible).map(function (element) { return element.getAttribute(\"aria-label\") || element.tagName; }) : []; }",
+  "  };",
+  "  return \"installed\";",
+  "})()"
+].join("\n");
+
+async function installPageDriver(cdp) {
+  return cdp.eval(PAGE_DRIVER);
+}
+
+/* Polls until the expression returns something truthy, and returns it (waitFor below cannot hand a value back). */
+async function waitForValue(cdp, expression, label, timeoutMs = 25000) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  for (;;) {
+    last = await cdp.eval(expression).catch((error) => "eval-failed: " + error.message);
+    if (last) return last;
+    if (Date.now() > deadline) throw new Error("timeout waiting for " + label + " (last=" + JSON.stringify(last) + ")");
+    await sleep(300);
+  }
+}
+
+/* Fills a text field the way a person does: focus the page's own input (which selects its content) and let the
+   browser type. The page's controlled inputs ignore dispatched input/change events, so this is the only path
+   that actually reaches the component state. */
+async function typeText(cdp, focusExpression, text) {
+  const focused = await cdp.eval(focusExpression);
+  if (focused !== "focused") throw new Error("could not focus a field for typing: " + JSON.stringify(focused));
+  if (text !== "") await cdp.send("Input.insertText", { text });
+  await sleep(250);
+}
+
+/* Empties a focused field with real backspaces. */
+async function clearText(cdp, focusExpression, presses = 48) {
+  const focused = await cdp.eval(focusExpression);
+  if (focused !== "focused") throw new Error("could not focus a field for clearing: " + JSON.stringify(focused));
+  const backspace = { key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 };
+  for (let index = 0; index < presses; index += 1) {
+    await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...backspace });
+    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...backspace });
+  }
+  await sleep(250);
+}
+
+/* Opens the settings dialog and the ORIGINAL Models section on whatever document is loaded, and waits until the
+   section settles. The onboarding card ("Add an API key to get started") is dismissed first: it is a dialog of its
+   own, and while it is up it is the topmost dialog, so a reader that looks at the topmost dialog would see none of
+   the section's rows. Both callers share this opening sequence and differ only in the expression that says the
+   section has settled: the overlay reaches its provider list, the control reaches either that list or the failure
+   the ORIGINAL composition reports for a remote origin. */
+async function openModelsFrame(cdp, label, ready) {
+  await installPageDriver(cdp);
+  const trace = {};
+  await waitFor(cdp, SHELL_PROBE, "app shell (" + label + ")");
+  if ((await cdp.eval("window.__e2ePage.dialogText().length > 0")) !== true) trace.started = await cdp.eval("window.__e2ePage.start()");
+  await waitForValue(cdp, "window.__e2ePage.dialogText().length > 0", "the settings dialog (" + label + ")", 25000);
+  await sleep(1200);
+  trace.dismissed = await cdp.eval("window.__e2ePage.dismiss()");
+  await sleep(1200);
+  trace.opened = await cdp.eval("window.__e2ePage.openModels()");
+  try {
+    await waitForValue(cdp, ready, "the Models section (" + label + ")", 25000);
+  } catch (error) {
+    console.log("MODELS-DIAG " + label + " " + JSON.stringify(trace) + " " + (await cdp.eval(MODELS_DIAG)));
+    throw error;
+  }
+  return trace;
+}
+
+/* The section frame plus the page's own provider list, as the overlay's page draws it. */
+async function openModelsSection(cdp, label) {
+  const trace = await openModelsFrame(cdp, label, "window.__e2ePage.hasText('Add model provider')");
+  trace.dismissedAgain = await cdp.eval("window.__e2ePage.dismiss()");
+  await sleep(900);
+  return JSON.parse(await cdp.eval("(function () { window.__e2ePage.dismiss(); return JSON.stringify({ rows: window.__e2ePage.providerRows(), text: window.__e2ePage.dialogText().slice(0, 400), body: window.__e2ePage.bodyText() }); })()"));
+}
+
+/* The Models section as the ORIGINAL composition serves it to a remote origin: the section frame appears, but its
+   provider directory cannot resolve off-loopback, so the page reports that failure itself and offers no provider
+   management. The read tolerates exactly that state and reports what the page said - it is the defect this issue
+   is about, so the control records it instead of driving an Add action that is not there. */
+async function openModelsSectionUnavailable(cdp, label) {
+  const available = "window.__e2ePage.hasText(\"Add model provider\")";
+  const unavailable = "window.__e2ePage.hasText(\"settings are unavailable in this browser\") || window.__e2ePage.hasText(\"Loading the provider directory failed\")";
+  await openModelsFrame(cdp, label, available + " || " + unavailable);
+  await sleep(900);
+  const dump = await cdp.eval("(function () { return JSON.stringify({ rows: window.__e2ePage.providerRows(), text: window.__e2ePage.dialogText().slice(0, 600), body: window.__e2ePage.bodyText().slice(0, 600) }); })()");
+  return JSON.parse(dump);
 }
 
 async function main() {
@@ -735,13 +1085,429 @@ async function main() {
   };
   assertNoStageErrors("onInitialLoad", false);
 
+  /* =====================================================================================================
+     Issue #4: the ORIGINAL provider page, driven from the remote (non-loopback) origin. Everything above
+     only used the developer-tools switch; this is the page the issue is about, driven the way a person
+     drives it - the page's own buttons, its own fields, its own validation messages. Every write is
+     verified twice: from what the page rendered, and from the instance Host (the page's own RPC bodies
+     read out of the CDP network log BY SHAPE, plus the profile patch and the credentials file on disk).
+     No atomicity is claimed anywhere here: the induced-failure steps at the end record exactly what the
+     original page does when only one of its two writes can land.
+     ===================================================================================================== */
+  const credentialsPath = join(home, ".credentials.yaml");
+  const readTextFile = async (path) => { try { return await readFile(path, "utf8"); } catch (error) { return "<missing: " + (error && error.code ? error.code : String(error)) + ">"; } };
+  /* llm-pi-ai providers.<route>, exactly as the page writes it: the route block is indented under "providers:". */
+  const providerBlock = (patchText, route) => {
+    const match = new RegExp("^ {6}" + route + ":\\s*\\n((?: {8}[^\\n]*\\n?)*)", "m").exec(patchText);
+    return match === null ? null : match[1];
+  };
+  const providerFieldOf = (patchText, route, field) => {
+    const block = providerBlock(patchText, route);
+    if (block === null) return null;
+    const match = new RegExp("^ {8}" + field + ":\\s*(.*)$", "m").exec(block);
+    return match === null ? null : match[1].trim();
+  };
+  const providerModelIds = (patchText, route) => {
+    const block = providerBlock(patchText, route) || "";
+    return Array.from(block.matchAll(/^ {10}- id:\s*(\S+)\s*$/gm)).map((match) => match[1]);
+  };
+  /* The revision the instance's settings Host reports for the provider namespace: two reads bracketing a failed
+     write must agree on it, which is what "nothing was persisted" means from the Host's own point of view. */
+  const namespaceRevision = (described) => {
+    const entry = described !== null && described.ok === true ? described.value.namespaces.filter((item) => item.ns === "llm-pi-ai")[0] : null;
+    return entry === undefined || entry === null ? null : entry.revision;
+  };
+  /* Every RPC the PAGE itself sent since a mark, parsed from its own request bodies: method plus the args it
+     carried. Every assertion below is made on this parsed shape, never on a stringified blob. */
+  const pageRpcCallsSince = (sinceSeq) => cdp.requests
+    .filter((request) => request.seq > sinceSeq && request.method === "POST" && /^\/api\/[^/]+\/[^/]+$/.test(pathnameOf(request.url)))
+    .map((request) => { let body = null; try { body = JSON.parse(request.postData); } catch (error) { body = null; } return body === null ? null : { seq: request.seq, method: body.method, args: body.payload ? body.payload.args : undefined }; })
+    .filter((call) => call !== null);
+  const settingsMutatesOf = (calls) => calls.filter((call) => call.method === "settings/mutate");
+  const credentialCallsOf = (calls, method) => calls.filter((call) => call.method === method);
+  const rowOf = (state, route) => state.rows.filter((row) => row.route === route)[0] || null;
+  const openEditor = async (route) => {
+    await cdp.eval('window.__e2ePage.rowButton(' + JSON.stringify(route) + ', "Edit")');
+    await waitForValue(cdp, '!!window.__e2ePage.editCard(' + JSON.stringify(route) + ')', "the inline provider editor (" + route + ")", 20000);
+    await cdp.eval('window.__e2ePage.editDetails(' + JSON.stringify(route) + ')');
+    await sleep(600);
+  };
+  const closeEditor = async (route) => { await cdp.eval('window.__e2ePage.cancel(' + JSON.stringify(route) + ')'); await sleep(700); };
+  /* A read of the page's provider list. A caller that expects a specific provider names it, and the read waits
+     for that row: the section draws its frame before its own settings read resolves. There is deliberately no
+     generic "the list is non-empty" wait, because in a pristine profile the page draws its built-in provider
+     card ALREADY EXPANDED (that card has no Edit button then), so rows are only keyable off a collapsed card -
+     which is exactly what this stage asserts about the provider it creates. */
+  const readProviderSide = async (label, expectRoute) => {
+    const state = await openModelsSection(cdp, label);
+    if (expectRoute !== undefined) {
+      try {
+        await waitForValue(cdp, "window.__e2ePage.providerRows().some((row) => row.route === " + JSON.stringify(expectRoute) + ")", "the provider row (" + expectRoute + ", " + label + ")", 20000);
+      } catch (error) {
+        console.log("PROVIDERS-DIAG " + label + " routes=" + JSON.stringify(state.rows.map((row) => row.route)) + " dump=" + (await cdp.eval(MODELS_CARDS)));
+        throw error;
+      }
+    }
+    return state;
+  };
+  /* What the page's own editor shows for the key: it can only offer to replace a stored value, never reveal one. */
+  const keySideOf = async (route) => {
+    await openEditor(route);
+    const form = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(route) + ')');
+    await closeEditor(route);
+    const fields = form && Array.isArray(form.fields) ? form.fields : [];
+    return fields.filter((field) => field.label === "API key")[0] || null;
+  };
+  const pageSecrets = async () => secretsIn(await cdp.eval("window.__e2ePage.bodyText()"));
+  /* The credential criterion of issue #4, read the same way at every boundary the page survives - a refresh, a
+     forced reconnect, a restart: the page's own rendering, the store on the instance Host and the editor's offer
+     to replace, plus the provider the page deleted through its own flow, which must still be gone on every side.
+     The phrase names the boundary inside each check and the evidence entry stays separate per boundary. */
+  const assertCredentialSurvival = async (label, phrase, evidenceKey) => {
+    const state = await readProviderSide(label, PAGE_PROVIDER);
+    const row = rowOf(state, PAGE_PROVIDER);
+    const refs = credentialRefsOf(await readTextFile(credentialsPath));
+    const deleted = await rpcFor(instance.url)("credentials/describe", { refs: [PAGE_KEY_REF_2] });
+    const deletedRef = deleted.ok === true && deleted.value[PAGE_KEY_REF_2] !== undefined ? deleted.value[PAGE_KEY_REF_2] : null;
+    const patch = await readPatch();
+    const key = await keySideOf(PAGE_PROVIDER);
+    const deletedRow = rowOf(state, PAGE_PROVIDER_2);
+    evidence.modelsPage[evidenceKey] = { row, refs, text: state.text.slice(0, 200), deletedRow, deletedRef: deletedRef === null ? null : { configured: deletedRef.configured }, profileHasDeletedProvider: providerBlock(patch, PAGE_PROVIDER_2) !== null };
+    check("after " + phrase + " the provider page still lists the provider, with its key reported as configured only", row !== null && row.displayName === PAGE_PROVIDER_DISPLAY_2 && row.keyConfigured === true && row.keyValue === "", JSON.stringify(row));
+    check("after " + phrase + " the stored credential is unchanged and still not readable from the page", refs[PAGE_KEY_REF] === PAGE_KEY_ROTATED && secretsIn(state.body).length === 0, JSON.stringify(refs));
+    check("after " + phrase + " the page's own editor still only offers to replace the stored key, never shows it", key !== null && key.value === "" && key.placeholder.indexOf("Configured") !== -1, JSON.stringify(key));
+    check("the provider the page deleted is still gone after " + phrase + ": no row, no profile entry, no stored credential, and the Host does not report its reference as configured", deletedRow === null && state.body.indexOf(PAGE_PROVIDER_2) === -1 && providerBlock(patch, PAGE_PROVIDER_2) === null && refs[PAGE_KEY_REF_2] === undefined && (deletedRef === null || deletedRef.configured !== true), JSON.stringify({ deletedRow, deletedRef: deletedRef === null ? null : { configured: deletedRef.configured }, refs: Object.keys(refs) }));
+  };
+
+  if (MODE !== "overlay") {
+    /* CONTROL: the original composition. The Models section is served by the original page, and that page resolves
+       its provider directory off the loopback origin: from a remote origin it reports its own failure and offers no
+       provider management at all. That is the defect this issue is about, so the control records what the page
+       actually did rather than driving an Add action that is not there, and asserts that nothing reached the
+       instance Host either. The persisted-value contrast is covered by the switch stages, which run in both modes. */
+    const controlPatchBefore = await readPatch();
+    const controlMark = cdp.eventSeq;
+    const controlPage = await openModelsSectionUnavailable(cdp, "control provider page");
+    const controlCalls = pageRpcCallsSince(controlMark);
+    const controlPatchAfter = await readPatch();
+    evidence.modelsPage = { controlText: controlPage.text.slice(0, 300), controlRows: controlPage.rows.map((row) => row.route), controlCalls: controlCalls.map((call) => call.method), patchBefore: controlPatchBefore, patchAfter: controlPatchAfter };
+    check("CONTROL: the ORIGINAL page is served to the remote browser, and its own provider directory cannot resolve there - it says so itself", /settings are unavailable in this browser/.test(controlPage.text) || /Loading the provider directory failed/.test(controlPage.text), controlPage.text.slice(0, 240));
+    check("CONTROL: the original page offers no provider management from a remote origin (no Add action, no provider rows)", controlPage.text.indexOf("Add model provider") === -1 && controlPage.rows.length === 0, JSON.stringify({ rows: controlPage.rows.map((row) => row.route), text: controlPage.text.slice(0, 160) }));
+    check("CONTROL: the original page's Models section writes nothing to the instance Host", controlPatchAfter === controlPatchBefore && controlCalls.filter((call) => /settings\/mutate|credentials\//.test(call.method)).length === 0, JSON.stringify(controlCalls.map((call) => call.method)));
+  } else {
+  /* ---- the page's own provider list, read from the remote origin ---- */
+  const modelsInitial = await readProviderSide("initial provider page");
+  const patchBefore = await readPatch();
+  evidence.modelsPage = { initialRows: modelsInitial.rows, initialText: modelsInitial.text.slice(0, 240), patchBefore };
+  check("the remote browser gets the ORIGINAL provider page: its own provider list and its own Add action", modelsInitial.text.indexOf("Enter your API keys to use models from the following providers") !== -1 && modelsInitial.text.indexOf("DeepSeek") !== -1 && modelsInitial.text.indexOf("deepseek-official") !== -1 && modelsInitial.text.indexOf("Add model provider") !== -1, modelsInitial.text.slice(0, 240));
+  check("the route this stage works on does not exist yet (the stage starts from a known state)", modelsInitial.body.indexOf(PAGE_PROVIDER) === -1, JSON.stringify(modelsInitial.rows.map((row) => row.route)));
+
+  /* ---- 1. create a provider through the page (route, name, base URL, protocol, key, one model) ---- */
+  const createMark = cdp.eventSeq;
+  await cdp.eval('window.__e2ePage.addProvider()');
+  await waitForValue(cdp, '!!window.__e2ePage.addCard()', "the add provider card", 20000);
+  await cdp.eval('window.__e2ePage.customTab()');
+  await sleep(800);
+  await cdp.eval('window.__e2ePage.addDetails()');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Provider ID")', PAGE_PROVIDER);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name")', PAGE_PROVIDER_DISPLAY);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Base URL")', PAGE_PROVIDER_BASE);
+  await cdp.eval('window.__e2ePage.pickAdd("API protocol", "anthropic-messages")');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("API key")', PAGE_KEY_1);
+  const saveWithoutModel = await cdp.eval('window.__e2ePage.cardButton("Create provider")');
+  await cdp.eval('window.__e2ePage.addModel("")');
+  await sleep(800);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Model ID 1")', PAGE_MODEL);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name 1")', PAGE_MODEL_NAME);
+  await sleep(400);
+  const createForm = await cdp.eval('window.__e2ePage.addDump()');
+  const createSave = await cdp.eval('window.__e2ePage.saveAdd("Create provider")');
+  await sleep(3000);
+  const createCalls = pageRpcCallsSince(createMark);
+  const createMutation = settingsMutatesOf(createCalls)[0];
+  const createOps = createMutation && Array.isArray(createMutation.args.ops) ? createMutation.args.ops : [];
+  const createOp = createOps.length === 1 ? createOps[0] : null;
+  const createValue = createOp && createOp.value && typeof createOp.value === "object" ? createOp.value : null;
+  const createCredential = credentialCallsOf(createCalls, "credentials/set")[0];
+  const patchAfterCreate = await readPatch();
+  const refsAfterCreate = credentialRefsOf(await readTextFile(credentialsPath));
+  evidence.modelsPage.create = { form: createForm, save: createSave, calls: createCalls, patch: patchAfterCreate, refs: refsAfterCreate };
+  check("the page's own form cannot be submitted while the provider has no model", saveWithoutModel === "disabled", JSON.stringify(saveWithoutModel));
+  check("the page created the provider as exactly one settings/mutate on its own namespace, guarded by the revision it read", createMutation !== undefined && createMutation.args.ns === "llm-pi-ai" && createOps.length === 1 && createOp.op === "set" && JSON.stringify(createOp.path) === JSON.stringify(["providers", PAGE_PROVIDER]) && typeof createMutation.args.expectedRevision === "number", JSON.stringify(createCalls.filter((call) => call.method === "settings/mutate")).slice(0, 500));
+  check("the created configuration carries the fields the form held, plus the credential reference the page derives", createValue !== null && createValue.displayName === PAGE_PROVIDER_DISPLAY && createValue.baseURL === PAGE_PROVIDER_BASE && createValue.api === "anthropic-messages" && createValue.apiKeyEnv === PAGE_KEY_REF && Array.isArray(createValue.models) && createValue.models.length === 1 && createValue.models[0].id === PAGE_MODEL, JSON.stringify(createOp).slice(0, 500));
+  check("the typed test key left the page write-only, under the reference derived from the route", createCredential !== undefined && createCredential.args.ref === PAGE_KEY_REF && createCredential.args.value === PAGE_KEY_1, JSON.stringify(credentialCallsOf(createCalls, "credentials/set")).slice(0, 300));
+  check("the configuration the page saved is on the instance Host (profile patch, llm-pi-ai providers.<route>)", providerFieldOf(patchAfterCreate, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_DISPLAY && providerFieldOf(patchAfterCreate, PAGE_PROVIDER, "baseURL") === PAGE_PROVIDER_BASE && providerFieldOf(patchAfterCreate, PAGE_PROVIDER, "api") === "anthropic-messages" && providerFieldOf(patchAfterCreate, PAGE_PROVIDER, "apiKeyEnv") === PAGE_KEY_REF && providerModelIds(patchAfterCreate, PAGE_PROVIDER).join(",") === PAGE_MODEL, JSON.stringify(providerBlock(patchAfterCreate, PAGE_PROVIDER)).slice(0, 400));
+  check("the credential the page typed is on the instance Host", refsAfterCreate[PAGE_KEY_REF] === PAGE_KEY_1, JSON.stringify(Object.keys(refsAfterCreate)));
+  const afterCreate = await readProviderSide("after create", PAGE_PROVIDER);
+  await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-13-provider-created.png"));
+  const createdRow = rowOf(afterCreate, PAGE_PROVIDER);
+  check("the page lists the new provider with its own identity and actions", createdRow !== null && createdRow.displayName === PAGE_PROVIDER_DISPLAY && createdRow.custom === true && createdRow.hasDelete === true, JSON.stringify(createdRow));
+  check("the page reports the credential as configured and cannot show the key itself", createdRow !== null && createdRow.keyConfigured === true && createdRow.keyValue === "" && createdRow.editorOpen === false, JSON.stringify(createdRow));
+  check("no test secret appears in the page's own text after a create", (await pageSecrets()).length === 0, JSON.stringify(await pageSecrets()));
+  const describeCreated = await rpcFor(instance.url)("credentials/describe", { refs: [PAGE_KEY_REF] });
+  check("the page's own read path cannot read a stored secret back (describe reports configured, never a value)", describeCreated.ok === true && describeCreated.value[PAGE_KEY_REF].configured === true && describeCreated.value[PAGE_KEY_REF].value === undefined, JSON.stringify(describeCreated).slice(0, 300));
+
+  /* ---- 2. the page's own field validation, with a provider that now exists ---- */
+  const patchBeforeValidation = await readPatch();
+  await cdp.eval('window.__e2ePage.addProvider()');
+  await waitForValue(cdp, '!!window.__e2ePage.addCard()', "the add provider card (validation)", 20000);
+  await cdp.eval('window.__e2ePage.customTab()');
+  await sleep(800);
+  await cdp.eval('window.__e2ePage.addDetails()');
+  /* The form is filled the way a successful create fills it - route, name, base URL, protocol, key and one model -
+     so that each refusal can be attributed to the single field under test. The create flow above already proves the
+     no-model rule disables the button on its own, and that is why this form carries a model: without one, all three
+     refusals would be explained by that rule instead of by the validator being measured. */
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Provider ID")', "Bad_Route");
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name")', "E2E Rejected Provider");
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Base URL")', PAGE_PROVIDER_BASE);
+  await cdp.eval('window.__e2ePage.pickAdd("API protocol", "anthropic-messages")');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("API key")', PAGE_KEY_1);
+  await cdp.eval('window.__e2ePage.addModel("")');
+  await sleep(800);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Model ID 1")', PAGE_MODEL);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name 1")', PAGE_MODEL_NAME);
+  await sleep(600);
+  const malformedRoute = { form: await cdp.eval('window.__e2ePage.addDump()'), save: await cdp.eval('window.__e2ePage.cardButton("Create provider")') };
+  await clearText(cdp, 'window.__e2ePage.focusAdd("Provider ID")');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Provider ID")', PAGE_PROVIDER);
+  await sleep(700);
+  const takenRoute = { form: await cdp.eval('window.__e2ePage.addDump()'), save: await cdp.eval('window.__e2ePage.cardButton("Create provider")') };
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Provider ID")', PAGE_PROVIDER_2);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Base URL")', "not-a-url");
+  await sleep(700);
+  const malformedBase = { form: await cdp.eval('window.__e2ePage.addDump()'), save: await cdp.eval('window.__e2ePage.cardButton("Create provider")') };
+  /* Put the only field that is still wrong back the way it was: the very same form must become saveable again. */
+  await clearText(cdp, 'window.__e2ePage.focusAdd("Base URL")');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Base URL")', PAGE_PROVIDER_BASE);
+  await sleep(700);
+  const corrected = { form: await cdp.eval('window.__e2ePage.addDump()'), save: await cdp.eval('window.__e2ePage.cardButton("Create provider")') };
+  evidence.modelsPage.validation = { malformedRoute, takenRoute, malformedBase, corrected };
+  check("the page keeps its own Provider ID validation (a malformed route is reported and cannot be saved)", malformedRoute.save === "disabled" && malformedRoute.form.paragraphs.some((text) => text.indexOf("Start with a lowercase letter") !== -1), JSON.stringify({ save: malformedRoute.save, paragraphs: malformedRoute.form.paragraphs }).slice(0, 400));
+  check("the page refuses a Provider ID that is already taken (message reported, nothing saveable)", takenRoute.save === "disabled" && takenRoute.form.paragraphs.some((text) => text.indexOf("already uses this ID") !== -1), JSON.stringify({ save: takenRoute.save, paragraphs: takenRoute.form.paragraphs }).slice(0, 400));
+  check("the page keeps its own Base URL validation", malformedBase.save === "disabled" && malformedBase.form.paragraphs.some((text) => text.indexOf("valid HTTP") !== -1), JSON.stringify({ save: malformedBase.save, paragraphs: malformedBase.form.paragraphs }).slice(0, 400));
+  check("the three refusals were the fields' doing, not an unsaveable form: the same form saves once the wrong field is corrected", corrected.save === "enabled" && corrected.form.paragraphs.every((text) => text.indexOf("Start with a lowercase letter") === -1 && text.indexOf("already uses this ID") === -1 && text.indexOf("valid HTTP") === -1), JSON.stringify({ save: corrected.save, paragraphs: corrected.form.paragraphs }).slice(0, 400));
+  await cdp.eval('window.__e2ePage.cancel("")');
+  await sleep(900);
+  check("none of the refused forms was persisted (the profile is byte-identical)", (await readPatch()) === patchBeforeValidation, JSON.stringify((await readPatch()).slice(0, 200)));
+
+  /* ---- 3. edit the provider through the page: name, base URL, protocol, a second model, a new key ---- */
+  const editMark = cdp.eventSeq;
+  await openEditor(PAGE_PROVIDER);
+  const editFormBefore = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  check("the page's editor opens on the saved values and only says that a key is configured", editFormBefore.fields.some((field) => field.label === "Display name" && field.value === PAGE_PROVIDER_DISPLAY) && editFormBefore.fields.some((field) => field.label === "Base URL" && field.value === PAGE_PROVIDER_BASE) && editFormBefore.fields.some((field) => field.label === "API key" && field.value === "" && field.placeholder.indexOf("Configured") !== -1) && editFormBefore.fields.every((field) => secretsIn(String(field.value)).length === 0), JSON.stringify(editFormBefore.fields).slice(0, 700));
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_DISPLAY_2);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Base URL")', PAGE_PROVIDER_BASE_2);
+  await cdp.eval('window.__e2ePage.pickEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "API protocol", "openai-completions")');
+  await cdp.eval('window.__e2ePage.addModel(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(900);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Model ID 2")', PAGE_MODEL_2);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name 2")', PAGE_MODEL_NAME_2);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "API key")', PAGE_KEY_2);
+  await sleep(400);
+  const editSave = await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3000);
+  const editCalls = pageRpcCallsSince(editMark);
+  const editMutation = settingsMutatesOf(editCalls)[0];
+  const editOps = editMutation && Array.isArray(editMutation.args.ops) ? editMutation.args.ops : [];
+  const editCredential = credentialCallsOf(editCalls, "credentials/set")[0];
+  const patchAfterEdit = await readPatch();
+  const refsAfterEdit = credentialRefsOf(await readTextFile(credentialsPath));
+  evidence.modelsPage.edit = { save: editSave, calls: editCalls, patch: patchAfterEdit, refs: refsAfterEdit };
+  check("the page's editor sent leaf-path operations under the same revision guard", editMutation !== undefined && editMutation.args.ns === "llm-pi-ai" && typeof editMutation.args.expectedRevision === "number" && editOps.length >= 3 && editOps.every((op) => op.op === "set" && op.path[0] === "providers" && op.path[1] === PAGE_PROVIDER && op.path.length === 3), JSON.stringify(editOps.map((op) => JSON.stringify(op.path.slice(2)))).slice(0, 400));
+  check("the edit changed the name, the base URL, the protocol and the model list on the instance Host", providerFieldOf(patchAfterEdit, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_DISPLAY_2 && providerFieldOf(patchAfterEdit, PAGE_PROVIDER, "baseURL") === PAGE_PROVIDER_BASE_2 && providerFieldOf(patchAfterEdit, PAGE_PROVIDER, "api") === "openai-completions" && providerModelIds(patchAfterEdit, PAGE_PROVIDER).join(",") === PAGE_MODEL + "," + PAGE_MODEL_2, JSON.stringify(providerBlock(patchAfterEdit, PAGE_PROVIDER)).slice(0, 400));
+  check("a second key typed into the page replaces the stored credential", editCredential !== undefined && editCredential.args.ref === PAGE_KEY_REF && editCredential.args.value === PAGE_KEY_2 && refsAfterEdit[PAGE_KEY_REF] === PAGE_KEY_2, JSON.stringify(refsAfterEdit));
+  const afterEdit = await readProviderSide("after edit", PAGE_PROVIDER);
+  const editedRow = rowOf(afterEdit, PAGE_PROVIDER);
+  check("the page re-renders the provider under its new name and still only reports the key as configured", editedRow !== null && editedRow.displayName === PAGE_PROVIDER_DISPLAY_2 && editedRow.keyConfigured === true && editedRow.keyValue === "", JSON.stringify(editedRow));
+  check("no test secret appears in the page's own text after an edit", (await pageSecrets()).length === 0, JSON.stringify(await pageSecrets()));
+  const editedKey = await keySideOf(PAGE_PROVIDER);
+  check("the page's own editor offers only to replace the stored key and cannot show it", editedKey !== null && editedKey.value === "" && editedKey.placeholder.indexOf("Configured") !== -1, JSON.stringify(editedKey));
+
+  /* ---- 4. the revision guard is not bypassed: another writer wins and the page refuses ---- */
+  const conflictMark = cdp.eventSeq;
+  const described = await rpcFor(instance.url)("settings/describe", {});
+  const llmNamespace = described.ok === true ? described.value.namespaces.filter((entry) => entry.ns === "llm-pi-ai")[0] : null;
+  check("the Host reports the namespace revision the guard is built on", llmNamespace !== null && typeof llmNamespace.revision === "number", JSON.stringify(llmNamespace === null ? described : { ns: llmNamespace.ns, revision: llmNamespace.revision }));
+  await openEditor(PAGE_PROVIDER);
+  const bumped = await rpcFor(instance.url)("settings/mutate", { ns: "llm-pi-ai", ops: [{ op: "set", path: ["providers", PAGE_PROVIDER, "displayName"], value: PAGE_PROVIDER_STALE }], expectedRevision: llmNamespace.revision });
+  check("another writer changes the same namespace while the editor is open (the revision moves on)", bumped.ok === true, JSON.stringify(bumped).slice(0, 300));
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_BLOCKED);
+  await sleep(400);
+  const conflictSave = await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3000);
+  const conflictCalls = pageRpcCallsSince(conflictMark);
+  const conflictForm = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  const patchAfterConflict = await readPatch();
+  evidence.modelsPage.conflict = { save: conflictSave, calls: conflictCalls, form: conflictForm, patch: patchAfterConflict };
+  check("the page's Apply really sent the stale revision it read when the editor opened", settingsMutatesOf(conflictCalls).some((call) => typeof call.args.expectedRevision === "number" && call.args.expectedRevision === llmNamespace.revision), JSON.stringify(settingsMutatesOf(conflictCalls).map((call) => call.args.expectedRevision)));
+  check("the refused edit reports the recorded conflict message instead of overwriting silently", conflictForm.paragraphs.some((text) => text.indexOf("Someone else changed these settings") !== -1), JSON.stringify(conflictForm.paragraphs).slice(0, 400));
+  check("the refused edit persisted nothing (the other writer's value is still the stored one)", providerFieldOf(patchAfterConflict, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_STALE, JSON.stringify(providerFieldOf(patchAfterConflict, PAGE_PROVIDER, "displayName")));
+  await closeEditor(PAGE_PROVIDER);
+
+  /* ---- 5. a key typed into the reopened editor replaces the stored one again ---- */
+  const replaceMark = cdp.eventSeq;
+  await openEditor(PAGE_PROVIDER);
+  const reopenedForm = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  check("the reopened editor reads the namespace again and shows the value the other writer left", reopenedForm.fields.some((field) => field.label === "Display name" && field.value === PAGE_PROVIDER_STALE), JSON.stringify(reopenedForm.fields).slice(0, 400));
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_DISPLAY_2);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "API key")', PAGE_KEY_3);
+  await sleep(400);
+  const replaceSave = await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3000);
+  const replaceCalls = pageRpcCallsSince(replaceMark);
+  const refsAfterReplace = credentialRefsOf(await readTextFile(credentialsPath));
+  evidence.modelsPage.replaceKey = { save: replaceSave, calls: replaceCalls, refs: refsAfterReplace };
+  check("a key typed into the page replaces the stored credential a second time", credentialCallsOf(replaceCalls, "credentials/set").some((call) => call.args.ref === PAGE_KEY_REF && call.args.value === PAGE_KEY_3) && refsAfterReplace[PAGE_KEY_REF] === PAGE_KEY_3, JSON.stringify(refsAfterReplace));
+  check("the provider page is back on the name this stage keeps for the survival checks", providerFieldOf(await readPatch(), PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_DISPLAY_2, JSON.stringify(providerFieldOf(await readPatch(), PAGE_PROVIDER, "displayName")));
+  await closeEditor(PAGE_PROVIDER);
+
+  /* ---- 6. delete: a second provider goes away with its configuration and its key, the first one stays ---- */
+  const deleteMark = cdp.eventSeq;
+  await cdp.eval('window.__e2ePage.addProvider()');
+  await waitForValue(cdp, '!!window.__e2ePage.addCard()', "the add provider card (delete case)", 20000);
+  await cdp.eval('window.__e2ePage.customTab()');
+  await sleep(800);
+  await cdp.eval('window.__e2ePage.addDetails()');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Provider ID")', PAGE_PROVIDER_2);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name")', PAGE_PROVIDER_2_DISPLAY);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Base URL")', PAGE_PROVIDER_2_BASE);
+  await cdp.eval('window.__e2ePage.pickAdd("API protocol", "anthropic-messages")');
+  await typeText(cdp, 'window.__e2ePage.focusAdd("API key")', PAGE_KEY_2_OF_2);
+  await cdp.eval('window.__e2ePage.addModel("")');
+  await sleep(800);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Model ID 1")', PAGE_MODEL);
+  await typeText(cdp, 'window.__e2ePage.focusAdd("Display name 1")', PAGE_MODEL_NAME);
+  await sleep(400);
+  const secondSave = await cdp.eval('window.__e2ePage.saveAdd("Create provider")');
+  await sleep(3000);
+  const secondState = await readProviderSide("second provider created", PAGE_PROVIDER_2);
+  const secondRow = rowOf(secondState, PAGE_PROVIDER_2);
+  const refsAfterSecond = credentialRefsOf(await readTextFile(credentialsPath));
+  check("a second provider can be added while the first one stays configured", secondSave.state === "clicked" && secondRow !== null && secondRow.keyConfigured === true && refsAfterSecond[PAGE_KEY_REF_2] === PAGE_KEY_2_OF_2 && refsAfterSecond[PAGE_KEY_REF] === PAGE_KEY_3, JSON.stringify({ secondSave, secondRow, refs: refsAfterSecond }));
+  await cdp.eval('window.__e2ePage.rowButton(' + JSON.stringify(PAGE_PROVIDER_2) + ', "Delete")');
+  await waitForValue(cdp, 'window.__e2ePage.dialogText().indexOf(' + JSON.stringify(PAGE_PROVIDER_2) + ') !== -1 && /stored API key/.test(window.__e2ePage.dialogText())', "the delete confirmation", 15000);
+  const confirmText = await cdp.eval('window.__e2ePage.dialogText()');
+  await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-14-provider-delete-confirm.png"));
+  const confirmClick = await cdp.eval('window.__e2ePage.confirmDelete()');
+  await sleep(3000);
+  const deleteCalls = pageRpcCallsSince(deleteMark);
+  const unsetCall = credentialCallsOf(deleteCalls, "credentials/unset")[0];
+  const deleteMutation = settingsMutatesOf(deleteCalls).pop();
+  const deleteOps = deleteMutation && Array.isArray(deleteMutation.args.ops) ? deleteMutation.args.ops : [];
+  const patchAfterDelete = await readPatch();
+  const refsAfterDelete = credentialRefsOf(await readTextFile(credentialsPath));
+  const afterDelete = await readProviderSide("after delete", PAGE_PROVIDER);
+  evidence.modelsPage.delete = { confirm: confirmText.slice(0, 300), calls: deleteCalls, patch: patchAfterDelete, refs: refsAfterDelete, rows: afterDelete.rows };
+  check("the page's delete confirmation names the provider and says the stored API key goes with it", confirmClick === "clicked" && /stored API key/.test(confirmText) && confirmText.indexOf(PAGE_PROVIDER_2) !== -1 && confirmText.indexOf(PAGE_PROVIDER_2_DISPLAY) !== -1, JSON.stringify({ confirmClick, confirmText: confirmText.slice(0, 300) }));
+  check("deleting through the page removes the stored credential and then the configuration, both through the ordinary service entry points", unsetCall !== undefined && unsetCall.args.ref === PAGE_KEY_REF_2 && deleteMutation !== undefined && deleteMutation.args.ns === "llm-pi-ai" && deleteOps.length === 1 && deleteOps[0].op === "unset" && JSON.stringify(deleteOps[0].path) === JSON.stringify(["providers", PAGE_PROVIDER_2]) && unsetCall.seq < deleteMutation.seq, JSON.stringify(deleteCalls).slice(0, 600));
+  check("the delete path carries no expectedRevision (recorded as the original page sends it, not claimed as protection)", deleteMutation !== undefined && deleteMutation.args.expectedRevision === undefined, JSON.stringify(deleteMutation && deleteMutation.args).slice(0, 300));
+  check("the deleted provider is gone from the page, from the profile and from the credential store", rowOf(afterDelete, PAGE_PROVIDER_2) === null && afterDelete.body.indexOf(PAGE_PROVIDER_2) === -1 && providerBlock(patchAfterDelete, PAGE_PROVIDER_2) === null && refsAfterDelete[PAGE_KEY_REF_2] === undefined, JSON.stringify({ routes: afterDelete.rows.map((row) => row.route), mentionedInPage: afterDelete.body.indexOf(PAGE_PROVIDER_2) !== -1, refs: Object.keys(refsAfterDelete) }));
+  check("the deletion left the other provider and its credential untouched", providerFieldOf(patchAfterDelete, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_DISPLAY_2 && refsAfterDelete[PAGE_KEY_REF] === PAGE_KEY_3, JSON.stringify(refsAfterDelete));
+
+  /* ---- the page-driven stage is a clean window of its own: nothing it did may error ---- */
+  assertLiveTransport("modelsPage");
+  assertNoStageErrors("modelsPage", false);
+
+  /* ---- 7. induced write failures: what the page reports, and what it does not promise ---- */
+  const patchBackup = await readPatch();
+  const credentialsBackup = await readTextFile(credentialsPath);
+  const induceUnwritable = async (path) => { await rm(path, { recursive: true, force: true }); await mkdir(path, { recursive: true, mode: 0o700 }); };
+  /* The mode is part of the file: the credential store refuses to write a credentials file that is readable beyond
+     its owner (the page says so in as many words), so a restored file has to come back with the mode it had. */
+  const fileMode = async (path) => (await stat(path)).mode & 0o777;
+  const patchMode = await fileMode(patchPath);
+  const credentialsMode = await fileMode(credentialsPath);
+  const restoreFile = async (path, text, mode) => { await rm(path, { recursive: true, force: true }); await writeFile(path, text); await chmod(path, mode); };
+  const failureRange = cdp.eventSeq;
+  const failureErrors = cdp.errorEvents().length;
+  /* What the instance's settings Host serves before the attempt: a write that fails cannot have moved it. */
+  const settingsBeforeFailure = await rpcFor(instance.url)("settings/describe", {});
+  /* (a) the configuration write cannot land at all */
+  await induceUnwritable(patchPath);
+  await openEditor(PAGE_PROVIDER);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_BLOCKED);
+  await sleep(400);
+  const configFailureSave = await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3500);
+  const configFailureForm = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  /* Read the failure target WHILE the failure is still in force, before the harness puts its own file back:
+     afterwards the directory is gone, and comparing with the backup would only show that the harness restored its
+     own copy rather than that the page's write persisted nothing. */
+  const failureTargetIsDirectory = (await stat(patchPath)).isDirectory();
+  await restoreFile(patchPath, patchBackup, patchMode);
+  const patchAfterConfigFailure = await readPatch();
+  const settingsAfterConfigFailure = await rpcFor(instance.url)("settings/describe", {});
+  evidence.modelsPage.configWriteFailure = { save: configFailureSave, form: configFailureForm, patch: patchAfterConfigFailure, targetIsDirectory: failureTargetIsDirectory, revisionBefore: namespaceRevision(settingsBeforeFailure), revisionAfter: namespaceRevision(settingsAfterConfigFailure) };
+  check("a configuration write that cannot land is reported in the page and leaves the editor open", configFailureForm.paragraphs.length > 0 && configFailureForm.paragraphs.some((text) => /failed to (read|write) patches|EISDIR|is a directory/.test(text)), JSON.stringify(configFailureForm.paragraphs).slice(0, 400));
+  check("the failed configuration write persisted nothing: its target was still the unusable directory the harness made while the page reported the failure, the instance serves the same settings revision it served before the attempt, and the refused value is nowhere in the profile", failureTargetIsDirectory === true && namespaceRevision(settingsBeforeFailure) !== null && namespaceRevision(settingsBeforeFailure) === namespaceRevision(settingsAfterConfigFailure) && patchAfterConfigFailure.indexOf(PAGE_PROVIDER_BLOCKED) === -1, JSON.stringify({ targetIsDirectory: failureTargetIsDirectory, revisionBefore: namespaceRevision(settingsBeforeFailure), revisionAfter: namespaceRevision(settingsAfterConfigFailure), refusedValueInProfile: patchAfterConfigFailure.indexOf(PAGE_PROVIDER_BLOCKED) !== -1 }).slice(0, 400));
+  await closeEditor(PAGE_PROVIDER);
+  /* (b) the configuration lands and the key cannot: the partial success the page documents */
+  await induceUnwritable(credentialsPath);
+  const partialMark = cdp.eventSeq;
+  await openEditor(PAGE_PROVIDER);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_PARTIAL);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "API key")', PAGE_KEY_ROTATED);
+  await sleep(400);
+  const partialSave = await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3500);
+  const partialCalls = pageRpcCallsSince(partialMark);
+  const partialForm = await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  const patchAfterPartial = await readPatch();
+  evidence.modelsPage.partialSuccess = { save: partialSave, calls: partialCalls, form: partialForm, patch: patchAfterPartial, refs: "<the credentials file was a directory: unreadable>" };
+  check("when only the key write can land, the configuration half really is persisted (no atomic transaction is claimed)", providerFieldOf(patchAfterPartial, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_PARTIAL, JSON.stringify(providerFieldOf(patchAfterPartial, PAGE_PROVIDER, "displayName")));
+  check("the page reports the failed key write and does not claim success (the editor stays open)", partialForm.fields.length > 0 && partialForm.paragraphs.some((text) => /credentials|EISDIR|is a directory/.test(text)), JSON.stringify(partialForm.paragraphs).slice(0, 400));
+  await restoreFile(credentialsPath, credentialsBackup, credentialsMode);
+  /* the retry path: the same editor, nothing retyped - the page retries the outstanding write alone */
+  const retryMark = cdp.eventSeq;
+  await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3500);
+  const retryCalls = pageRpcCallsSince(retryMark);
+  const refsAfterRetry = credentialRefsOf(await readTextFile(credentialsPath));
+  evidence.modelsPage.retryAfterFailure = { calls: retryCalls, refs: refsAfterRetry, form: await cdp.eval('window.__e2ePage.editDump(' + JSON.stringify(PAGE_PROVIDER) + ')') };
+  check("once the file is writable again, one more Apply writes the outstanding key (the retry path only writes what is missing)", refsAfterRetry[PAGE_KEY_REF] === PAGE_KEY_ROTATED, JSON.stringify({ calls: retryCalls.map((call) => call.method), refs: refsAfterRetry }));
+  await closeEditor(PAGE_PROVIDER);
+  /* leave the provider on the name the survival checks below expect, with the rotated key in place */
+  await openEditor(PAGE_PROVIDER);
+  await typeText(cdp, 'window.__e2ePage.focusEdit(' + JSON.stringify(PAGE_PROVIDER) + ', "Display name")', PAGE_PROVIDER_DISPLAY_2);
+  await sleep(400);
+  await cdp.eval('window.__e2ePage.saveEdit(' + JSON.stringify(PAGE_PROVIDER) + ')');
+  await sleep(3000);
+  await closeEditor(PAGE_PROVIDER);
+  const failureEvents = cdp.errorEvents().slice(failureErrors);
+  evidence.modelsPage.inducedFailureEvents = failureEvents.map((event) => ({ method: event.method, text: String(event.text).slice(0, 300) }));
+  evidence.modelsPage.inducedFailureWrites = pageRpcCallsSince(failureRange).map((call) => ({ method: call.method, args: call.args }));
+  /* The induced failures above are the harness's own doing, but only a page error that names one of them is
+     excused: anything else the browser reported inside this window - an unrelated runtime exception, console error
+     or network failure, during the failures or during the successful retry that follows - fails the stage exactly
+     as it would anywhere else. The stage mark then moves on so the stages that follow judge their own windows. */
+  const inducedWords = /failed to (read|write) patches|EISDIR|illegal operation on a directory|is a directory|\.credentials\.yaml|credentials/i;
+  const unrelatedFailureEvents = failureEvents.filter((event) => !inducedWords.test(String(event.text)));
+  evidence.modelsPage.unrelatedFailureEvents = unrelatedFailureEvents.map((event) => ({ method: event.method, text: String(event.text).slice(0, 300) }));
+  check("nothing but the page's own reported write failures surfaced in the induced-failure window (runtime, console and network errors stay fatal there too)", unrelatedFailureEvents.length === 0, JSON.stringify(unrelatedFailureEvents.map((event) => ({ method: event.method, text: String(event.text).slice(0, 200) }))).slice(0, 600));
+  stageMark = cdp.errorEvents().length;
+  }
+
+
   await reload();
   await sleep(7000);
-  await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-04-after-reload.png"));
+  try {
+    await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-04-after-reload.png"));
+  } catch (error) {
+    let diag = "unavailable";
+    try { diag = await cdp.eval(MODELS_DIAG); } catch (inner) { diag = "eval failed: " + inner.message; }
+    console.log("RELOAD-DIAG " + diag + " instance=" + JSON.stringify(instance.out().slice(-800)));
+    throw error;
+  }
   const afterReload = JSON.parse(await cdp.eval(SWITCH_PROBE));
   evidence.switchAfterReload = afterReload;
   if (MODE === "overlay") check("value survives a page refresh on the remote origin", afterReload.state === "false", JSON.stringify(afterReload));
   else check("CONTROL: the remote toggle is lost on refresh", afterReload.state === "true", JSON.stringify(afterReload));
+  if (MODE === "overlay") {
+    /* Issue #4, credential criterion: a refresh must leave the page's provider state correct, and the page may
+       still only say that a key is configured. Both sides are read: the page's own rendering and the store. */
+    await assertCredentialSurvival("after reload", "a refresh", "afterReload");
+  }
   assertLiveTransport("afterReload");
   assertNoStageErrors("afterReload", true);
 
@@ -874,6 +1640,11 @@ async function main() {
     check("the two post-recovery writes reached the Host as parsed settings/mutate RPCs on ui-settings (enabled true, then false) after the recovery point", settingsWritesAfterRecovery.length === 2 && roundTripWrites === "on|off", JSON.stringify({ roundTripWrites, settingsWritesAfterRecovery, apiRequestsAfterRecovery: apiAfterRecovery.length }));
     check("the recovered settings socket carried frames after the recovery point (activity, not just creation)", newMuxFramesAfterRecovery > 0, JSON.stringify({ newMuxFramesAfterRecovery, newMuxConnections }));
   }
+  if (MODE === "overlay") {
+    /* Issue #4, credential criterion: the same read after the forced reconnect - the page never reloaded here,
+       so this is the state of the document that survived the transport interruption. */
+    await assertCredentialSurvival("after reconnect", "the reconnect", "afterReconnect");
+  }
   assertLiveTransport("afterReconnect");
   assertNoStageErrors("afterReconnect", true, documentUrl, true);
   /* Strict, zero-tolerance window on THIS resumed document, before the harness navigates away from it: once
@@ -916,6 +1687,11 @@ async function main() {
   evidence.switchLoopbackAfterRestart = loopbackRestart;
   check("the instance Host holds the persisted value after a restart", loopbackRestart.state === "false", JSON.stringify(loopbackRestart));
 
+  if (MODE === "overlay") {
+    /* Issue #4, credential criterion, last leg: a new process has to find the same configuration and credential.
+       Read on the remote origin again, so this also proves the provider page is served after the restart. */
+    await assertCredentialSurvival("after restart", "a restart", "afterRestart");
+  }
   assertLiveTransport("afterLoopbackAccess");
   assertNoStageErrors("afterLoopbackAccess", true);
   await navigate(remoteUrl2);
@@ -1144,6 +1920,12 @@ async function main() {
     evidence.credentialsFile = { path: credentialPath, mode: credentialMode.toString(8), holdsRef: credentialFile.includes(TEST_CREDENTIAL_REF), refDigest: credentialDigestAfter };
     check("the credential file itself is untouched and still owner-only", credentialFile.includes(TEST_CREDENTIAL_REF) && credentialMode === 0o600, "mode " + credentialMode.toString(8));
     check("the stored credential VALUE is the same one the replacement saw (it was not rotated, dropped or replaced)", credentialValueAfter !== null && credentialDigestAfter === evidence.credentialRefDigestBeforeRollback, credentialDigestAfter + " vs " + evidence.credentialRefDigestBeforeRollback);
+    /* Issue #4: the provider configuration and the key written through the ORIGINAL page are ordinary stored
+       state too, so the rollback must not discard them either. Read straight off the disk after the rollback. */
+    const refsAfterRollback = credentialRefsOf(await readFile(join(home, ".credentials.yaml"), "utf8"));
+    evidence.modelsPage.afterRollback = { refs: refsAfterRollback, block: providerBlock(patchAfterRollback, PAGE_PROVIDER) };
+    check("the provider configuration created through the page survives the rollback", providerFieldOf(patchAfterRollback, PAGE_PROVIDER, "displayName") === PAGE_PROVIDER_DISPLAY_2 && providerFieldOf(patchAfterRollback, PAGE_PROVIDER, "baseURL") === PAGE_PROVIDER_BASE_2 && providerFieldOf(patchAfterRollback, PAGE_PROVIDER, "apiKeyEnv") === PAGE_KEY_REF && providerModelIds(patchAfterRollback, PAGE_PROVIDER).join(",") === PAGE_MODEL + "," + PAGE_MODEL_2, JSON.stringify(providerBlock(patchAfterRollback, PAGE_PROVIDER)).slice(0, 400));
+    check("the key stored through the page survives the rollback", refsAfterRollback[PAGE_KEY_REF] === PAGE_KEY_ROTATED, JSON.stringify(Object.keys(refsAfterRollback)));
     assertLiveTransport("afterRollback");
     assertNoStageErrors("afterRollback", true);
   }
