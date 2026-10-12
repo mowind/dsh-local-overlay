@@ -1300,7 +1300,7 @@ async function main() {
   };
   /* Every RPC the PAGE itself sent since a mark, parsed from its own request bodies: method plus the args it
      carried. Every assertion below is made on this parsed shape, never on a stringified blob. */
-  const pageRpcCallsSince = (sinceSeq) => cdp.requests
+  const pageRpcCallsSince = (sinceSeq, client = cdp) => client.requests
     .filter((request) => request.seq > sinceSeq && request.method === "POST" && /^\/api\/[^/]+\/[^/]+$/.test(pathnameOf(request.url)))
     .map((request) => { let body = null; try { body = JSON.parse(request.postData); } catch (error) { body = null; } return body === null ? null : { seq: request.seq, method: body.method, args: body.payload ? body.payload.args : undefined }; })
     .filter((call) => call !== null);
@@ -2170,7 +2170,7 @@ async function main() {
   /* The page's OWN calls, read out of the CDP network log by shape, so the harness never has to trust the
      page's account of what it did. Settings writes are filtered by NAMESPACE as well: the page writes
      namespaces of its own in the same window (the onboarding notice, for one), and those belong to no stage. */
-  const probeRequestMark = () => (cdp.requests.length === 0 ? 0 : cdp.requests[cdp.requests.length - 1].seq);
+  const probeRequestMark = (client = cdp) => (client.requests.length === 0 ? 0 : client.requests[client.requests.length - 1].seq);
   const pageCalls = (since, method, ns) => pageRpcCallsSince(since).filter((call) => call.method === method && call.args !== undefined && (method !== "settings/mutate" || ns === undefined || call.args.ns === ns));
   const probeCalls = (since, method) => pageCalls(since, method, PROBE_NS);
   /* What the instance serves for one namespace, read through the same public RPC the page uses. */
@@ -2691,40 +2691,37 @@ async function main() {
      clicks below, against the contract the replaced provider implements: writes are serialized behind one
      another, a disposed form issues no further write, and an interrupted write never becomes the stored value.
      ------------------------------------------------------------------------------------------------------- */
-  const PREFS_PANEL = "(Array.from(document.querySelectorAll('[role=dialog]')).some(function (d) { return d.getClientRects().length > 0 && /Appearance|外观/.test(d.innerText || ''); }))";
-  /* The page-side helpers below are written without backslash escapes on purpose: they are string literals in
+  /* The page-side helpers below are written without backslash escapes on purpose: they are
      this file AND source text for the browser, so every pattern here is spelled with character classes of
      literal characters only. */
   const PREFS_HELPERS = [
     "var visible = function (e) { return !!e && e.getClientRects().length > 0; };",
     "var list = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };",
-    "var flatten = function (v) { return v.split(String.fromCharCode(10)).join(' ').split(String.fromCharCode(13)).join(' ').split(String.fromCharCode(9)).join(' '); };",
-    "var text = function (e) { return flatten(String((e && e.innerText) || '')).replace(/ +/g, ' ').trim(); };",
-    "var panel = list('[role=dialog]').filter(visible).pop() || document.body;",
-    "var cubes = function () { return list('button', panel).filter(visible).filter(function (b) { return b.hasAttribute('aria-pressed'); }); };",
-    "var languageRow = function () { return list('button', panel).filter(visible).filter(function (b) { return b.getAttribute('aria-haspopup') === 'menu'; }).filter(function (b) { return /language|语言/i.test(text(b.parentElement.parentElement)); })[0]; };",
+    "var flatten = function (v) { return v.split(String.fromCharCode(10)).join(\" \").split(String.fromCharCode(13)).join(\" \").split(String.fromCharCode(9)).join(\" \"); };",
+    "var text = function (e) { return flatten(String((e && e.innerText) || \"\")).replace(/ +/g, \" \").trim(); };",
+    "var panel = list(\"[role=dialog]\").filter(visible).pop() || document.body;",
+    "var cubes = function () { return list(\"button\", panel).filter(visible).filter(function (b) { return b.hasAttribute(\"aria-pressed\"); }); };",
+    "var languageRow = function () { return list(\"button\", panel).filter(visible).filter(function (b) { return b.getAttribute(\"aria-haspopup\") === \"menu\"; }).filter(function (b) { return /language|语言/i.test(text(b.parentElement.parentElement)); })[0]; };",
     "var instantRows = function () { return cubes().concat(languageRow() ? [languageRow()] : []).map(function (b) { return b.parentElement.parentElement; }); };",
-    "var saveButtons = function () { return instantRows().map(function (r) { return list('button', r).filter(visible).filter(function (b) { return /^(save|save changes|保存|保存更改)$/i.test(text(b)); }); }).reduce(function (a, b) { return a.concat(b); }, []); };"
+    "var saveButtons = function () { return instantRows().map(function (r) { return list(\"button\", r).filter(visible).filter(function (b) { return /^(save|save changes|保存|保存更改)$/i.test(text(b)); }); }).reduce(function (a, b) { return a.concat(b); }, []); };"
   ].join(" ");
-  const PREFS_INVENTORY = "(() => { " + PREFS_HELPERS + " var pressed = cubes().filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }); return JSON.stringify({ cubes: cubes().map(function (b) { return text(b).slice(0, 24); }), pressed: pressed.length === 1 ? text(pressed[0]).slice(0, 24) : null, language: languageRow() ? text(languageRow()).slice(0, 24) : null, saveButtons: saveButtons().map(function (b) { return text(b).slice(0, 24); }), scheme: String(getComputedStyle(document.documentElement).colorScheme || ''), background: getComputedStyle(document.body).backgroundColor }); })()";
-  const prefsClickCube = (pattern) => "(() => { " + PREFS_HELPERS + " var cube = cubes().filter(function (b) { return " + pattern + ".test(text(b)); })[0]; if (!cube) return 'MISS ' + cubes().map(function (b) { return text(b); }).join('/'); cube.click(); return 'CLICKED ' + text(cube).slice(0, 24); })()";
+  const PREFS_INVENTORY = "(() => { " + PREFS_HELPERS + " var pressed = cubes().filter(function (b) { return b.getAttribute(\"aria-pressed\") === \"true\"; }); return JSON.stringify({ cubes: cubes().map(function (b) { return text(b).slice(0, 24); }), pressed: pressed.length === 1 ? text(pressed[0]).slice(0, 24) : null, language: languageRow() ? text(languageRow()).slice(0, 24) : null, saveButtons: saveButtons().map(function (b) { return text(b).slice(0, 24); }), scheme: String(getComputedStyle(document.documentElement).colorScheme || \"\"), background: getComputedStyle(document.body).backgroundColor }); })()";
+  const prefsClickCube = (pattern) => "(() => { " + PREFS_HELPERS + " var cube = cubes().filter(function (b) { return " + pattern + ".test(text(b)); })[0]; if (!cube) return \"MISS \" + cubes().map(function (b) { return text(b); }).join(\"/\"); cube.click(); return \"CLICKED \" + text(cube).slice(0, 24); })()";
   const PREFS_CLICK_DARK = prefsClickCube("/dark|深色/i");
   const PREFS_CLICK_LIGHT = prefsClickCube("/light|浅色/i");
-  const PREFS_OPEN_LANGUAGE = "(() => { " + PREFS_HELPERS + " var row = languageRow(); if (!row) return 'MISS'; row.click(); return 'OPENED ' + text(row).slice(0, 24); })()";
-  const PREFS_MENU = "(() => { " + PREFS_HELPERS + " return JSON.stringify(list('[role=menuitem],[role=option]').filter(visible).map(function (e) { return { label: text(e).slice(0, 24), selected: String(e.className).indexOf('_selected_') !== -1 }; })); })()";
-  const prefsPickLanguage = (label) => "(() => { " + PREFS_HELPERS + " var items = list('[role=menuitem],[role=option]').filter(visible); var item = items.filter(function (e) { return text(e) === " + JSON.stringify(label) + "; })[0]; if (!item) return 'MISS ' + items.map(function (e) { return text(e); }).join('/'); item.click(); return 'CLICKED ' + text(item); })()";
+  const PREFS_CLICK_SYSTEM = prefsClickCube("/system|跟随系统/i");
+  const PREFS_OPEN_LANGUAGE = "(() => { " + PREFS_HELPERS + " var row = languageRow(); if (!row) return \"MISS\"; row.click(); return \"OPENED \" + text(row).slice(0, 24); })()";
+  const PREFS_MENU = "(() => { " + PREFS_HELPERS + " return JSON.stringify(list(\"[role=menuitem],[role=option]\").filter(visible).map(function (e) { return { label: text(e).slice(0, 24), selected: String(e.className).indexOf(\"_selected_\") !== -1 }; })); })()";
+  const prefsPickLanguage = (label) => "(() => { " + PREFS_HELPERS + " var items = list(\"[role=menuitem],[role=option]\").filter(visible); var item = items.filter(function (e) { return text(e) === " + JSON.stringify(label) + "; })[0]; if (!item) return \"MISS \" + items.map(function (e) { return text(e); }).join(\"/\"); item.click(); return \"CLICKED \" + text(item); })()";
 
   const preferencesUrl = "http://" + TEST_HOST + ":" + new URL(instance.url).port + "/" + new URL(instance.url).search;
   evidence.urls.remoteWithInstancePreferences = preferencesUrl;
   /* Re-derived after the restart below: a fresh instance listens on a fresh port. */
   let preferencesRpc = rpcFor(instance.url);
-  const prefsMarkOf = (client) => (client.requests.length === 0 ? 0 : client.requests[client.requests.length - 1].seq);
-  /* Every RPC a client sent since a mark, parsed from its own request bodies - the same shape the plugin stage
-     reads off the page, here also for the SECOND access end, which has a browser of its own. */
-  const prefsCallsSince = (client, sinceSeq) => client.requests
-    .filter((request) => request.seq > sinceSeq && request.method === "POST")
-    .map((request) => { let body = null; try { body = JSON.parse(request.postData); } catch (error) { body = null; } return body === null || body.method === undefined ? null : { seq: request.seq, method: body.method, args: body.payload ? body.payload.args : undefined }; })
-    .filter((call) => call !== null);
+  /* The stage's own view on the shared decoder and mark above: the second access end is a browser of its own,
+     so both are read against whichever CDP connection is meant, and the namespaces this stage owns are picked
+     out of the parsed calls here rather than by a decoder of its own. */
+  const prefsCallsSince = (client, sinceSeq) => pageRpcCallsSince(sinceSeq, client);
   const prefsWritesSince = (client, sinceSeq, ns) => prefsCallsSince(client, sinceSeq).filter((call) => call.method === "settings/mutate" && call.args !== undefined && (ns === undefined || call.args.ns === ns));
   /* The two namespaces this stage owns: a fresh document may write namespaces of its own in the same window
      (the onboarding notice, for one), and those belong to no stage. */
@@ -2745,33 +2742,57 @@ async function main() {
   /* Only evaluated when an attempt fails: it reports what the document actually offered, so a failure here is
      debuggable from the run log instead of by guesswork. */
   const PREFS_DIAG = "(() => { const txt = (e) => ((e && e.innerText) || \"\").replace(/ +/g, \" \").trim().slice(0, 100); const root = document.getElementById(\"root\"); return JSON.stringify({ dialogs: Array.from(document.querySelectorAll(\"[role=dialog]\")).map((d) => ({ shown: d.offsetParent !== null, text: txt(d) })), buttons: Array.from(document.querySelectorAll(\"button\")).map(txt).filter((s) => s.length > 0).slice(0, 24), rootInert: !!(root && root.inert), body: txt(document.body) }); })()";
-  /* The stock opener presses the page's own settings entry once and trusts the first shell render. This one
-     waits for that entry to be there and retries the press, because a document whose app is still mounting can
-     accept the click without opening anything (and the stage drives the page right after a navigation). */
+  /* The appearance row only exists in the settings dialog's General section, and the earlier stages leave
+     dialogs of their own behind, so this opener does not trust a weak "a dialog is up" probe: it normalises the
+     document (anything open is closed), presses the page's own settings entry, switches the section with the
+     page's own VISIBLE nav item, and only then checks that the three appearance cubes are really there - with
+     retries, because a document whose app is still mounting can accept a click without opening anything. */
+  const PREFS_CUBES_READY = "(() => { " + PREFS_HELPERS + " return cubes().length === 3; })()";
+  const PREFS_GENERAL = "(() => { " + PREFS_HELPERS + " var wanted = function (b) { return /^(general|通用)/i.test((b.getAttribute(\"aria-label\") || \"\").trim()) || /^(general|通用)/i.test(text(b)); }; var inPanel = list(\"button\", panel).filter(visible).filter(wanted); var anywhere = list(\"button\").filter(visible).filter(wanted); var target = inPanel[0] || anywhere.filter(function (b) { return b.closest(\"[role=dialog]\") !== null; })[0] || anywhere[0]; if (!target) return \"NO_GENERAL\"; target.click(); return \"CLICKED_GENERAL\"; })()";
+  const prefsCloseDialogs = async (client) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      if ((await client.eval("document.querySelectorAll(\"[role=dialog]\").length")) === 0) return true;
+      await client.eval("(() => { const key = { key: \"Escape\", bubbles: true }; window.dispatchEvent(new KeyboardEvent(\"keydown\", key)); document.dispatchEvent(new KeyboardEvent(\"keydown\", key)); return true; })()");
+      await sleep(700);
+    }
+    return (await client.eval("document.querySelectorAll(\"[role=dialog]\").length")) === 0;
+  };
   const openPreferences = async (client, shot) => {
     const attempts = 4;
-    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let ready = false;
+    for (let attempt = 1; attempt <= attempts && ready === false; attempt += 1) {
       await waitFor(client, PREFS_TRIGGER_READY, "the page's own settings entry", 60000);
-      if ((await client.eval(PREFS_PANEL)) === true) break;
-      const dialogsBefore = await client.eval("document.querySelectorAll('[role=dialog]').length");
+      await prefsCloseDialogs(client);
       await client.eval(SETTINGS_TRIGGER);
-      try {
-        await waitFor(client, "document.querySelectorAll('[role=dialog]').length > " + String(dialogsBefore) + " || " + PREFS_PANEL, "the settings panel behind the page's own settings entry", 15000);
-        break;
-      } catch (error) {
-        console.log("PREFS OPEN ATTEMPT " + String(attempt) + " FAILED: " + error.message + " :: " + (await client.eval(PREFS_DIAG)));
-        if (attempt === attempts) throw error;
-        await sleep(2500);
+      await sleep(1200);
+      const section = await client.eval(PREFS_GENERAL);
+      await sleep(1800);
+      ready = (await client.eval(PREFS_CUBES_READY)) === true;
+      if (ready === false) {
+        console.log("PREFS OPEN ATTEMPT " + String(attempt) + " FAILED: section=" + String(section) + " :: " + (await client.eval(PREFS_DIAG)));
+        if (attempt < attempts) await sleep(2000);
       }
     }
-    await client.eval(SETTINGS_GENERAL);
-    await sleep(1500);
+    if (ready === false) throw new Error("the settings panel with the appearance row never appeared in this document");
     if (shot !== undefined) await client.screenshot(shot);
   };
+  /* What the page shows for a stored preference: the scheme it computed and the cube it holds pressed. The
+     labels are the page's own copy, so both the English and the Chinese wording count as the same value. */
+  const prefsCubeIs = (inventory, scheme, english, chinese) => inventory.scheme.indexOf(scheme) !== -1 && (inventory.pressed === english || inventory.pressed === chinese);
+  const prefsCubeIsLight = (inventory) => prefsCubeIs(inventory, "light", "Light", "浅色");
+  const prefsCubeIsDark = (inventory) => prefsCubeIs(inventory, "dark", "Dark", "深色");
   /* The composition layers the profile loads RIGHT NOW: after an enable the own composition has replaced the
      upstream roster, so the row count has to be taken over the current list, not over the seeded one. */
   const prefsBundles = (await readJson(join(profileDir, "package.json"))).dsh.profile.bundles;
   const prefsExpectedProvider = MODE === "overlay" ? FORK_PACKAGE : "@deepseek-ai/dsh-client-ui-settings";
+  /* The module layer as the page and the loaded bundles see it right now, plus the invariant both boundaries of
+     this stage assert on it: exactly one settings provider module in the page's boot list, exactly one ui-settings
+     row across the loaded bundles, and that row naming the package this mode is meant to load. */
+  const preferencesInventory = async () => {
+    const modules = JSON.parse(await cdp.eval(MODULE_PROBE));
+    return { modules, providers: loadedProviders(modules), rows: await loadedSettingsRows(profileDir, prefsBundles) };
+  };
+  const preferencesInventoryHoldsOneProvider = (inventory) => inventory.providers.length === 1 && inventory.providers[0] === prefsExpectedProvider && inventory.rows.length === 1 && inventory.rows[0].provider === prefsExpectedProvider;
   const preferencesEvidence = {};
 
   /* A. The page this run already drives reaches its own General section and reads what the instance stores. */
@@ -2789,7 +2810,7 @@ async function main() {
     JSON.stringify({ page: prefsStart, appearance: prefsStoredStart.appearance, language: prefsStoredStart.language }));
 
   /* B. The instant click on the appearance row. */
-  const prefsMarkClick = prefsMarkOf(cdp);
+  const prefsMarkClick = probeRequestMark(cdp);
   const prefsClickDark = await cdp.eval(PREFS_CLICK_DARK);
   await sleep(2500);
   const prefsAfterClick = JSON.parse(await cdp.eval(PREFS_INVENTORY));
@@ -2818,7 +2839,7 @@ async function main() {
      the instance's value, and merely reading it must not write anything. */
   const secondClient = await startChromium(join(root, "chromium-b"));
   const cdpSecond = secondClient.cdp;
-  const prefsMarkSecond = prefsMarkOf(cdpSecond);
+  const prefsMarkSecond = probeRequestMark(cdpSecond);
   await cdpSecond.send("Page.navigate", { url: preferencesUrl }).catch(() => {});
   await openPreferences(cdpSecond, join(EVIDENCE_DIR, MODE + "-17-preferences-second-client.png"));
   const prefsSecond = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
@@ -2837,20 +2858,18 @@ async function main() {
 
   /* D. The release half of the module contract, on the page that clicked: the document is rebuilt from scratch,
      and the fresh document must mount exactly one settings provider and read the stored value back. */
-  const prefsMarkReload = prefsMarkOf(cdp);
+  const prefsMarkReload = probeRequestMark(cdp);
   await reload();
   await sleep(2500);
   await openPreferences(cdp, undefined);
   const prefsAfterReload = JSON.parse(await cdp.eval(PREFS_INVENTORY));
-  const prefsModulesAfterReload = JSON.parse(await cdp.eval(MODULE_PROBE));
-  const prefsProvidersAfterReload = loadedProviders(prefsModulesAfterReload);
-  const prefsRowsAfterReload = await loadedSettingsRows(profileDir, prefsBundles);
+  const prefsInventoryAfterReload = await preferencesInventory();
   const prefsWritesAfterReload = prefsInterfaceWrites(cdp, prefsMarkReload);
   const prefsStoredAfterReload = await preferencesOf();
-  preferencesEvidence.reload = { page: prefsAfterReload, providers: prefsProvidersAfterReload, rows: prefsRowsAfterReload, writes: prefsWritesAfterReload, stored: prefsStoredAfterReload };
+  preferencesEvidence.reload = { page: prefsAfterReload, providers: prefsInventoryAfterReload.providers, rows: prefsInventoryAfterReload.rows, writes: prefsWritesAfterReload, stored: prefsStoredAfterReload };
   check("the reloaded document loads exactly one settings provider module and the loaded bundles hold exactly one ui-settings row, so the release left no duplicate behind",
-    prefsProvidersAfterReload.length === 1 && prefsProvidersAfterReload[0] === prefsExpectedProvider && prefsRowsAfterReload.length === 1 && prefsRowsAfterReload[0].provider === prefsExpectedProvider,
-    JSON.stringify({ providers: prefsProvidersAfterReload, rows: prefsRowsAfterReload }));
+    preferencesInventoryHoldsOneProvider(prefsInventoryAfterReload),
+    JSON.stringify({ providers: prefsInventoryAfterReload.providers, rows: prefsInventoryAfterReload.rows }));
   if (MODE === "overlay") {
     check("a document rebuilt from scratch reads the instance's stored preference back, and the page writes nothing for it while doing so",
       prefsAfterReload.pressed === "Dark" && prefsAfterReload.scheme.indexOf("dark") !== -1 && prefsWritesAfterReload.length === 0 && prefsStoredAfterReload.appearance.value.preference === "dark" && prefsStoredAfterReload.appearance.revision === prefsStoredAfterClick.appearance.revision,
@@ -2861,10 +2880,43 @@ async function main() {
       JSON.stringify({ page: prefsAfterReload, writes: prefsWritesAfterReload }));
   }
 
+  /* D2. An already-open consumer of the same instance: the second end's panel stays open on the General section
+     while the first end writes a new appearance preference, so whatever the second end shows next comes from the
+     settings service it is subscribed to, not from a document of its own. */
+  const prefsMarkLiveRefresh = probeRequestMark(cdp);
+  const prefsSecondMarkLiveRefresh = probeRequestMark(cdpSecond);
+  const prefsStoredBeforeLiveRefresh = await preferencesOf();
+  const prefsClickLiveRefresh = await cdp.eval(PREFS_CLICK_LIGHT);
+  await sleep(2500);
+  const prefsStoredAfterLiveRefresh = await preferencesOf();
+  const prefsWritesLiveRefresh = prefsWritesSince(cdp, prefsMarkLiveRefresh, "ui-theme");
+  const prefsSecondWritesLiveRefresh = prefsInterfaceWrites(cdpSecond, prefsSecondMarkLiveRefresh);
+  const prefsSecondLiveRefresh = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
+  /* The other direction as well, so the second end is shown following a change rather than agreeing by accident,
+     and the value the queue phase below starts from is the dark one either way. */
+  const prefsClickLiveRefreshBack = await cdp.eval(PREFS_CLICK_DARK);
+  await sleep(2500);
+  const prefsStoredAfterLiveRefreshBack = await preferencesOf();
+  const prefsSecondLiveRefreshBack = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
+  preferencesEvidence.liveRefresh = { click: prefsClickLiveRefresh, storedBefore: prefsStoredBeforeLiveRefresh.appearance, storedAfter: prefsStoredAfterLiveRefresh.appearance, page: prefsSecondLiveRefresh, clickBack: prefsClickLiveRefreshBack, storedAfterBack: prefsStoredAfterLiveRefreshBack.appearance, pageBack: prefsSecondLiveRefreshBack, writesFirstEnd: prefsWritesLiveRefresh, writesSecondEnd: prefsSecondWritesLiveRefresh };
+  if (MODE === "overlay") {
+    check("the other access end's open page follows the first end's change in both directions without being reloaded, because the value is the instance's",
+      prefsClickLiveRefresh === "CLICKED Light" && prefsWritesLiveRefresh.length === 1 && prefsWritesLiveRefresh[0].args.ops[0].value === "light" && prefsStoredAfterLiveRefresh.appearance.value.preference === "light" &&
+      prefsCubeIsLight(prefsSecondLiveRefresh) && prefsSecondWritesLiveRefresh.length === 0 &&
+      prefsClickLiveRefreshBack === "CLICKED Dark" && prefsStoredAfterLiveRefreshBack.appearance.value.preference === "dark" && prefsCubeIsDark(prefsSecondLiveRefreshBack),
+      JSON.stringify(preferencesEvidence.liveRefresh));
+  } else {
+    check("CONTROL: the other access end's open page keeps its own rendering, because nothing was written to the instance at all",
+      prefsClickLiveRefresh === "CLICKED Light" && prefsClickLiveRefreshBack === "CLICKED Dark" && prefsWritesLiveRefresh.length === 0 && prefsStoredAfterLiveRefresh.appearance.value.preference === "system" &&
+      prefsStoredAfterLiveRefreshBack.appearance.value.preference === "system" && prefsSecondLiveRefresh.pressed === "System" && prefsSecondWritesLiveRefresh.length === 0,
+      JSON.stringify(preferencesEvidence.liveRefresh));
+  }
+
   /* E. Queued and in-flight writes, on the same instant row. Two clicks 120 ms apart are two writes, serialized
      behind each other and carrying the revision the previous one produced; a click that is still on the wire
      when the document is released writes at most once and never replays into a second value. */
-  const prefsMarkQueue = prefsMarkOf(cdp);
+  const prefsMarkQueue = probeRequestMark(cdp);
+  const prefsStoredBeforeQueue = await preferencesOf();
   const prefsQueueFirst = await cdp.eval(PREFS_CLICK_LIGHT);
   await sleep(120);
   const prefsQueueSecond = await cdp.eval(PREFS_CLICK_DARK);
@@ -2877,15 +2929,47 @@ async function main() {
     check("two rapid clicks are two serialized writes, and the second one carries the revision the first produced",
       prefsQueueFirst === "CLICKED Light" && prefsQueueSecond === "CLICKED Dark" && prefsWritesQueue.length === 2 &&
       prefsWritesQueue[0].args.ops[0].value === "light" && prefsWritesQueue[1].args.ops[0].value === "dark" &&
-      prefsWritesQueue[0].args.expectedRevision === prefsStoredAfterReload.appearance.revision && prefsWritesQueue[1].args.expectedRevision === prefsStoredAfterReload.appearance.revision + 1 &&
-      prefsStoredQueue.appearance.value.preference === "dark" && prefsStoredQueue.appearance.revision === prefsStoredAfterReload.appearance.revision + 2 && patchRow(prefsPatchQueue, "ui-theme").indexOf("preference: dark") !== -1,
+      prefsWritesQueue[0].args.expectedRevision === prefsStoredBeforeQueue.appearance.revision && prefsWritesQueue[1].args.expectedRevision === prefsStoredBeforeQueue.appearance.revision + 1 &&
+      prefsStoredQueue.appearance.value.preference === "dark" && prefsStoredQueue.appearance.revision === prefsStoredBeforeQueue.appearance.revision + 2 && patchRow(prefsPatchQueue, "ui-theme").indexOf("preference: dark") !== -1,
       JSON.stringify({ writes: prefsWritesQueue, stored: prefsStoredQueue.appearance, themeRow: patchRow(prefsPatchQueue, "ui-theme") }));
-    /* The in-flight write at the moment the document goes away: either it reached the instance or it did not,
-       but it may not become a second value later, and the fresh document has to agree with what is stored. */
-    const prefsMarkInFlight = prefsMarkOf(cdp);
+    /* The in-flight write at the moment the document goes away, held there on purpose: the harness intercepts
+       the settings RPC through CDP and never lets its RESPONSE through, so the write really reached the instance
+       while the page is still waiting for the answer, and a second click issued inside that window is queued
+       behind the first one. The release contract is asserted on exactly that state: the one write that was on the
+       wire landed, the queued successor never reaches the instance, and nothing replays afterwards. */
+    const prefsMarkInFlight = probeRequestMark(cdp);
     const prefsStoredBeforeInFlight = await preferencesOf();
+    const prefsWriteRequests = cdp.requests.filter((request) => request.seq > prefsMarkQueue && String(request.postData).indexOf("settings/mutate") !== -1);
+    const prefsRpcPattern = prefsWriteRequests.length > 0 ? prefsWriteRequests[prefsWriteRequests.length - 1].url + "*" : null;
+    let prefsInterceptionHeld = false;
+    if (prefsRpcPattern !== null) {
+      try { await cdp.send("Fetch.enable", { patterns: [{ urlPattern: prefsRpcPattern, requestStage: "Response" }] }); prefsInterceptionHeld = true; }
+      catch (error) { prefsInterceptionHeld = false; }
+    }
+    discontinue("in-flight release under a held-back response");
+    const prefsInFlightDocMark = String(await cdp.eval("(window.__e2eInFlightDocMark = 'inflight-' + Math.random().toString(36).slice(2), window.__e2eInFlightDocMark)"));
+    const prefsPauseMark = cdp.eventSeq;
     const prefsClickInFlight = await cdp.eval(PREFS_CLICK_LIGHT);
+    const prefsClickQueued = await cdp.eval(PREFS_CLICK_SYSTEM);
+    await sleep(700);
+    const prefsPausedWrites = cdp.events.filter((event) => event.seq > prefsPauseMark && event.method === "Fetch.requestPaused" && String(event.params.request.postData).indexOf("settings/mutate") !== -1);
+    const prefsPausedWriteIds = new Set(prefsPausedWrites.map((event) => event.params.requestId));
+    /* Nothing may have completed for the write the harness is holding: neither a finished load nor a failure. */
+    const prefsCompletedWhilePaused = cdp.events.filter((event) => event.seq > prefsPauseMark && prefsPausedWriteIds.has(event.params.requestId) && (event.method === "Network.loadingFinished" || event.method === "Network.loadingFailed"));
     await reload();
+    /* The reload command returns before the new document commits, and the held response may only be released once
+       the document that issued the write is really gone: releasing it into a page on its way out would let the
+       promise resolve and the queued successor be sent by that page. The marker tells the two documents apart. */
+    let prefsDocumentGone = false;
+    for (let attempt = 0; attempt < 40 && prefsDocumentGone === false; attempt += 1) {
+      await sleep(250);
+      let mark = "<eval-failed>";
+      try { mark = String(await cdp.eval("String(window.__e2eInFlightDocMark)")); } catch (error) { mark = "<eval-failed>"; }
+      prefsDocumentGone = mark !== prefsInFlightDocMark;
+    }
+    try { await cdp.send("Fetch.disable"); } catch (error) { prefsInterceptionHeld = false; }
+    check("the document that issued the held write is really gone before the harness releases the response",
+      prefsDocumentGone === true, JSON.stringify({ docMark: prefsInFlightDocMark, gone: prefsDocumentGone }));
     await sleep(4000);
     await openPreferences(cdp, undefined);
     const prefsAfterInFlight = JSON.parse(await cdp.eval(PREFS_INVENTORY));
@@ -2894,14 +2978,16 @@ async function main() {
     await sleep(2500);
     const prefsStoredSettled = await preferencesOf();
     const inFlightStored = prefsStoredAfterInFlight.appearance.value.preference;
-    preferencesEvidence.inFlightRelease = { click: prefsClickInFlight, writes: prefsWritesInFlight, storedBefore: prefsStoredBeforeInFlight.appearance, storedAfter: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight, themeRow: patchRow(await readPatch(), "ui-theme") };
-    check("a click still on the wire when the document is released writes at most once, leaves either the old value or the clicked one, and never replays afterwards",
-      prefsClickInFlight === "CLICKED Light" && prefsWritesInFlight.length <= 1 &&
-      (inFlightStored === prefsStoredBeforeInFlight.appearance.value.preference || inFlightStored === "light") &&
-      prefsStoredAfterInFlight.appearance.revision <= prefsStoredBeforeInFlight.appearance.revision + 1 &&
-      prefsStoredSettled.appearance.revision === prefsStoredAfterInFlight.appearance.revision && prefsStoredSettled.appearance.value.preference === inFlightStored &&
-      prefsAfterInFlight.pressed === (inFlightStored === "light" ? "Light" : "Dark"),
-      JSON.stringify({ click: prefsClickInFlight, writes: prefsWritesInFlight, before: prefsStoredBeforeInFlight.appearance, after: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight }));
+    preferencesEvidence.inFlightRelease = { pattern: prefsRpcPattern, interceptionHeld: prefsInterceptionHeld, pausedWrites: prefsPausedWrites.map((event) => ({ url: event.params.request.url, status: event.params.responseStatusCode })), completedWhilePaused: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued, writes: prefsWritesInFlight, storedBefore: prefsStoredBeforeInFlight.appearance, storedAfter: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight, themeRow: patchRow(await readPatch(), "ui-theme") };
+    check("the harness really held the write on the wire: the instance answered it, the response never reached the released document, and the click queued behind it was made in that window",
+      prefsInterceptionHeld === true && prefsPausedWrites.length === 1 && prefsPausedWrites[0].params.responseStatusCode === 200 && prefsCompletedWhilePaused.length === 0 && prefsClickInFlight === "CLICKED Light" && prefsClickQueued === "CLICKED System",
+      JSON.stringify({ pattern: prefsRpcPattern, held: prefsInterceptionHeld, paused: prefsPausedWrites.length, status: prefsPausedWrites.length > 0 ? prefsPausedWrites[0].params.responseStatusCode : null, completed: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued }));
+    check("a released document leaves exactly the one write that was on the wire and never sends the successor queued behind it: the instance holds the clicked value, nothing replays afterwards, and a fresh document reads that value",
+      prefsWritesInFlight.length === 1 && prefsWritesInFlight[0].args.ops[0].value === "light" &&
+      prefsStoredAfterInFlight.appearance.value.preference === "light" && prefsStoredAfterInFlight.appearance.revision === prefsStoredBeforeInFlight.appearance.revision + 1 &&
+      prefsStoredSettled.appearance.revision === prefsStoredAfterInFlight.appearance.revision && prefsStoredSettled.appearance.value.preference === "light" &&
+      prefsWritesInFlight.every((call) => call.args.ops[0].value !== "system") && inFlightStored !== "system" && prefsCubeIsLight(prefsAfterInFlight),
+      JSON.stringify({ writes: prefsWritesInFlight, queuedClick: prefsClickQueued, before: prefsStoredBeforeInFlight.appearance, after: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight }));
   } else {
     check("CONTROL: two rapid clicks on the instant row are two page-local changes and no settings write at all",
       prefsQueueFirst === "CLICKED Light" && prefsQueueSecond === "CLICKED Dark" && prefsWritesQueue.length === 0 && prefsStoredQueue.appearance.value.preference === "system" && prefsStoredQueue.appearance.revision === 0 && patchRow(prefsPatchQueue, "ui-theme") === "",
@@ -2910,7 +2996,7 @@ async function main() {
 
   /* F. The language row: the same instant contract, on the other preference the standard page owns. */
   const prefsStoredBeforeLanguage = await preferencesOf();
-  const prefsMarkLanguage = prefsMarkOf(cdp);
+  const prefsMarkLanguage = probeRequestMark(cdp);
   const prefsOpenLanguage = await cdp.eval(PREFS_OPEN_LANGUAGE);
   await sleep(900);
   const prefsLanguageMenu = JSON.parse(await cdp.eval(PREFS_MENU));
@@ -2939,6 +3025,66 @@ async function main() {
       prefsLanguagePicked === "CLICKED 中文" && prefsAfterLanguage.cubes.some((cube) => cube.indexOf("浅色") !== -1) && prefsAfterLanguage.language === "中文" && prefsWritesLanguageAny.length === 0 && prefsStoredAfterLanguage.language.revision === prefsStoredBeforeLanguage.language.revision && prefsStoredAfterLanguage.appearance.revision === prefsStoredBeforeLanguage.appearance.revision && prefsLocaleRowAfterLanguage === "",
       JSON.stringify({ picked: prefsLanguagePicked, page: prefsAfterLanguage, writes: prefsWritesLanguageAny, stored: prefsStoredAfterLanguage.language }));
   }
+
+  /* F2. The same document through a real transport interruption, with both preferences already stored: the open
+     panel keeps its rows, the instance keeps the values while the page cannot reach it, and the recovered document
+     writes the appearance row again - no reload, and that write has to reach the instance. */
+  const prefsRestartAuthority = new URL(preferencesUrl).host;
+  const prefsStoredBeforeWindow = await preferencesOf();
+  const prefsPageBeforeWindow = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  /* The probe the offline window runs fetches the document's own URL, and the app may have rewritten what sits
+     in the address bar, so the URL the harness expects to see fail is read off the page rather than assumed. */
+  const prefsProbeUrl = String(await cdp.eval("location.origin + location.pathname + location.search"));
+  /* Which value the in-flight phase above settled on is deliberately open (the released document may or may not
+     have got its write in), so the window clicks the OPPOSITE value: that click is a change either way, and the
+     assertions below are made against the value that was stored when the window opened. */
+  const prefsWindowBefore = prefsStoredBeforeWindow.appearance.value.preference;
+  const prefsWindowTarget = prefsWindowBefore === "light" ? "dark" : "light";
+  const prefsWindowClick = prefsWindowTarget === "dark" ? PREFS_CLICK_DARK : PREFS_CLICK_LIGHT;
+  const prefsDocMarkBeforeWindow = String(await cdp.eval("(window.__e2ePrefsDocMark = 'prefs-' + Math.random().toString(36).slice(2), window.__e2ePrefsDocMark)"));
+  const prefsMarkReconnect = probeRequestMark(cdp);
+  let prefsOfflineApplied = true;
+  discontinue("preference reconnect window");
+  try { await cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
+  catch (error) { prefsOfflineApplied = false; }
+  await sleep(3000);
+  const prefsTransportWhileOffline = await cdp.eval(transportProbe).catch((error) => "eval-failed:" + String(error));
+  const prefsFetchWhileOffline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
+  const prefsPageWhileOffline = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsStoredWhileOffline = await preferencesOf();
+  try { await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
+  catch (error) { prefsOfflineApplied = false; }
+  let prefsTransportBack = false;
+  for (let attempt = 0; attempt < 60 && prefsTransportBack === false; attempt += 1) { await sleep(500); prefsTransportBack = liveMuxConnections().length > 0; }
+  const prefsDocMarkAfterWindow = String(await cdp.eval("String(window.__e2ePrefsDocMark)"));
+  await openPreferences(cdp, join(EVIDENCE_DIR, MODE + "-20-preferences-after-reconnect.png"));
+  const prefsClickAfterReconnect = await cdp.eval(prefsWindowClick);
+  await sleep(2500);
+  const prefsAfterReconnect = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsWritesReconnect = prefsWritesSince(cdp, prefsMarkReconnect, "ui-theme");
+  const prefsStoredReconnect = await preferencesOf();
+  preferencesEvidence.transportWindow = { offlineApplied: prefsOfflineApplied, docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, transportWhileOffline: prefsTransportWhileOffline, fetchWhileOffline: prefsFetchWhileOffline, transportBack: prefsTransportBack, pageWhileOffline: prefsPageWhileOffline, storedWhileOffline: prefsStoredWhileOffline, click: prefsClickAfterReconnect, page: prefsAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect };
+  check("the harness really took the page offline, and the page's own settings transport failed at the network layer while both preferences were already stored",
+    prefsOfflineApplied === true && /^(failed|closed)$/.test(String(prefsTransportWhileOffline)) && /^rejected:/.test(String(prefsFetchWhileOffline)),
+    JSON.stringify({ offlineApplied: prefsOfflineApplied, transport: prefsTransportWhileOffline, fetch: prefsFetchWhileOffline }));
+  if (MODE === "overlay") {
+    check("the open panel still shows the instance's stored preferences while the page cannot reach the instance at all",
+      prefsPageWhileOffline.cubes.length === 3 && prefsPageWhileOffline.saveButtons.length === 0 && prefsPageWhileOffline.language === prefsPageBeforeWindow.language && prefsPageWhileOffline.pressed === prefsPageBeforeWindow.pressed &&
+      prefsStoredWhileOffline.appearance.value.preference === prefsWindowBefore && prefsStoredWhileOffline.language.value.preference === "zh",
+      JSON.stringify({ page: prefsPageWhileOffline, stored: prefsStoredWhileOffline }));
+    check("the SAME document writes the preference to the instance again once the transport is back, without a reload",
+      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && prefsTransportBack === true && /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 1 && prefsWritesReconnect[0].args.ns === "ui-theme" && prefsWritesReconnect[0].args.ops[0].value === prefsWindowTarget &&
+      prefsStoredReconnect.appearance.value.preference === prefsWindowTarget && prefsStoredReconnect.appearance.revision === prefsStoredWhileOffline.appearance.revision + 1 &&
+      prefsAfterReconnect.pressed === (prefsWindowTarget === "dark" ? "深色" : "浅色") &&
+      (prefsWindowTarget === "light" ? prefsCubeIsLight(prefsAfterReconnect) : prefsCubeIsDark(prefsAfterReconnect)),
+      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, transportBack: prefsTransportBack, windowBefore: prefsWindowBefore, target: prefsWindowTarget, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect.appearance, page: prefsAfterReconnect }));
+  } else {
+    check("CONTROL: the same window changes nothing on either side - the open page keeps what it had, and the instance still holds no preference at all",
+      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 0 && prefsStoredReconnect.appearance.value.preference === "system" && prefsStoredReconnect.appearance.revision === 0 && prefsStoredReconnect.language.revision === 0,
+      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect }));
+  }
+  assertLiveTransport("afterInstancePreferencesReconnect");
+  assertNoStageErrors("afterInstancePreferencesReconnect", true, prefsProbeUrl, true);
 
   /* G. A fresh process: the bundle list and every stored value are read from disk again, and a document opened
      on the new instance has to read the same preferences back. */
@@ -2985,17 +3131,29 @@ async function main() {
       ? prefsSecondAfterRestart.language === "中文" && prefsSecondAfterRestart.pressed === prefsPageAfterRestart.pressed && prefsSecondAfterRestart.cubes.length === 3
       : prefsSecondAfterRestart.language === "English" && prefsSecondAfterRestart.pressed === "System",
     JSON.stringify(prefsSecondAfterRestart));
+  /* The second access end is a browser of its own, and its own console is judged here: nothing of its own may
+     appear beyond the transport the instance restart took out from under it (that document was never reloaded),
+     and every event it did report is kept in the evidence. */
+  const prefsSecondEvents = cdpSecond.errorEvents();
+  const prefsSecondTolerated = prefsSecondEvents.filter((event) => {
+    if (event.method === "Network.loadingFailed") return event.params.canceled === true || isStreamTarget(event.url) || String(event.url).indexOf(prefsRestartAuthority) !== -1;
+    if (event.method === "Log.entryAdded") { const target = isStreamTarget(event.url) ? event.url : (quotedUrl(event.params.entry.text) || event.url); return isStreamTarget(target) || String(event.params.entry.text).indexOf(prefsRestartAuthority) !== -1; }
+    return false;
+  });
+  const prefsSecondUnexpected = prefsSecondEvents.filter((event) => prefsSecondTolerated.includes(event) === false);
+  evidence["console_afterInstancePreferences_secondEnd"] = prefsSecondEvents;
+  evidence["tolerated_afterInstancePreferences_secondEnd"] = prefsSecondTolerated.map((event) => ({ method: event.method, url: event.url, text: String(event.text).slice(0, 200) }));
+  check("the second access end's own console holds nothing beyond the transport the instance restart took out from under it (afterInstancePreferences_secondEnd)",
+    prefsSecondUnexpected.length === 0, JSON.stringify(prefsSecondUnexpected.slice(0, 3).map((event) => String(event.text).slice(0, 200))));
   secondClient.chrome.kill("SIGKILL");
 
   /* H. The whole stage ran through five documents, four of them rebuilt from scratch, and one instance restart:
      the module layer must still hold exactly one settings provider. */
-  const prefsModulesAtEnd = JSON.parse(await cdp.eval(MODULE_PROBE));
-  const prefsProvidersAtEnd = loadedProviders(prefsModulesAtEnd);
-  const prefsRowsAtEnd = await loadedSettingsRows(profileDir, prefsBundles);
+  const prefsInventoryAtEnd = await preferencesInventory();
   const prefsPatchAtEnd = await readPatch();
-  preferencesEvidence.moduleAtEnd = { modules: prefsModulesAtEnd, providers: prefsProvidersAtEnd, rows: prefsRowsAtEnd, uiSettingsRowsInProfilePatch: prefsPatchAtEnd.split("\n").filter((line) => line.trim() === "- id: ui-settings").length, uiSettingsRowsAnyPrefix: prefsPatchAtEnd.split("- id: ui-settings").length - 1, uiSettingsRowInProfilePatch: patchRow(prefsPatchAtEnd, "ui-settings") };
+  preferencesEvidence.moduleAtEnd = { modules: prefsInventoryAtEnd.modules, providers: prefsInventoryAtEnd.providers, rows: prefsInventoryAtEnd.rows, uiSettingsRowsInProfilePatch: prefsPatchAtEnd.split("\n").filter((line) => line.trim() === "- id: ui-settings").length, uiSettingsRowsAnyPrefix: prefsPatchAtEnd.split("- id: ui-settings").length - 1, uiSettingsRowInProfilePatch: patchRow(prefsPatchAtEnd, "ui-settings") };
   check(MODE === "overlay" ? "after every reload, restart and second access end the page still loads exactly one settings provider, and the profile's patch file still holds exactly one ui-settings row" : "CONTROL: after every reload, restart and second access end the page still loads exactly one settings provider, the upstream package",
-    prefsProvidersAtEnd.length === 1 && prefsProvidersAtEnd[0] === prefsExpectedProvider && prefsRowsAtEnd.length === 1 && prefsRowsAtEnd[0].provider === prefsExpectedProvider &&
+    preferencesInventoryHoldsOneProvider(prefsInventoryAtEnd) &&
     /* The profile's own patch file carries the override row the run is built on, and it has to stay a single row:
        `- id: ui-settings-general` and its siblings are separate rows, so the count matches row headers exactly.
        The row also has to name the provider this mode is supposed to load - the replacement itself is what changed. */
