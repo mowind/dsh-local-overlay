@@ -6,6 +6,7 @@ import http from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clientRpcCalls, namespaceFacts, namespaceOf, namespaceSummary, pageSettingsWrites, settingsMutates, verifySettingsWrite, writeRecordOf, writtenNamespaces, authorityOf, pathnameOf, SURFACE_GAPS, SURFACE_EFFECT_PROBE, SURFACE_MENU_PROBE, SURFACE_PANEL_ENGLISH_PROBE, SURFACE_PLUGIN_FIELDS, SURFACE_PLUGIN_PAGES, SURFACE_PRESET_NS, SURFACE_ROWS, SURFACE_ROWS_PROBE, surfaceAriaPressExpression, surfaceCubeExpression, surfaceCubeStateExpression, surfaceExactClickExpression, surfaceOpenExpression, surfacePickExpression, surfaceRenderedInventory, surfaceRowCountExpression, surfaceRowTextExpression, surfaceSwitchExpression, surfaceSwitchStateExpression } from "./lib/settings-surface.mjs";
 
 const TEST_HOST = process.env.TEST_HOST || "dsh-proto.test";
 const CHROMIUM = process.env.CHROMIUM || "/usr/sbin/chromium";
@@ -124,8 +125,10 @@ const streamPath = (value) => {
   return slash === -1 ? "" : rest.slice(slash);
 };
 const isStreamTarget = (value) => STREAM_PATH.test(streamPath(value));
-const authorityOf = (url) => { try { return new URL(url).host; } catch (error) { return ""; } };
-const pathnameOf = (url) => { try { return new URL(url).pathname; } catch (error) { return ""; } };
+/* authorityOf / pathnameOf (and the client-RPC and settings-write parsers below) live in the shared module
+   tools/lib/settings-surface.mjs: the inventory stage and the report generator have to read the page's own
+   traffic the same way this harness does, and a second parser would be a second answer to "did the page
+   really write this namespace?". */
 
 function resolveDshBin() {
   if (process.env.DSH_BIN) return process.env.DSH_BIN;
@@ -1300,10 +1303,7 @@ async function main() {
   };
   /* Every RPC the PAGE itself sent since a mark, parsed from its own request bodies: method plus the args it
      carried. Every assertion below is made on this parsed shape, never on a stringified blob. */
-  const pageRpcCallsSince = (sinceSeq, client = cdp) => client.requests
-    .filter((request) => request.seq > sinceSeq && request.method === "POST" && /^\/api\/[^/]+\/[^/]+$/.test(pathnameOf(request.url)))
-    .map((request) => { let body = null; try { body = JSON.parse(request.postData); } catch (error) { body = null; } return body === null ? null : { seq: request.seq, method: body.method, args: body.payload ? body.payload.args : undefined }; })
-    .filter((call) => call !== null);
+  const pageRpcCallsSince = (sinceSeq, client = cdp) => clientRpcCalls(client.requests, sinceSeq);
   const settingsMutatesOf = (calls) => calls.filter((call) => call.method === "settings/mutate");
   const credentialCallsOf = (calls, method) => calls.filter((call) => call.method === method);
   const rowOf = (state, route) => state.rows.filter((row) => row.route === route)[0] || null;
@@ -1790,23 +1790,13 @@ async function main() {
        POST, pathname exactly /api/settings/mutate, envelope method settings/mutate, namespace ui-settings,
        and the enabled paths the two clicks wrote. A poll or a catalog request cannot stand in for it. */
     const apiAfterRecovery = cdp.requests.filter((request) => request.seq > recoverySeq && pathnameOf(request.url).startsWith("/api/"));
-    const parseMutate = (request) => {
-      if (request.method !== "POST") return null;
-      if (pathnameOf(request.url) !== "/api/settings/mutate") return null;
-      let body = null;
-      try { body = JSON.parse(request.postData); } catch (error) { return null; }
-      if (body === null || body.method !== "settings/mutate") return null;
-      const args = body.payload === undefined ? undefined : body.payload.args;
-      if (args === undefined || args.ns !== "ui-settings" || !Array.isArray(args.ops)) return null;
-      /* The round trip claims one switch write per RPC, so a batch carrying anything else is not recognised:
-         the envelope must hold exactly one op, and it has to be a set on the single path ["enabled"]. */
-      if (args.ops.length !== 1) return null;
-      const op = args.ops[0];
-      if (op.op !== "set" || !Array.isArray(op.path) || op.path.length !== 1 || op.path[0] !== "enabled") return null;
-      const enabledOps = [op.value];
-      return { seq: request.seq, rpcId: body.rpcId, ns: args.ns, expectedRevision: args.expectedRevision === undefined ? null : args.expectedRevision, enabledOps };
-    };
-    const settingsWritesAfterRecovery = apiAfterRecovery.map(parseMutate).filter((entry) => entry !== null);
+    /* The write itself, read out of the page's own traffic by the SHARED parser (tools/lib/settings-surface.mjs),
+       and then held to this stage's shape: the URL the write went to, the namespace, and exactly one set op on
+       the single path ["enabled"]. A poll or a catalog request cannot stand in for it, and a batch carrying
+       anything else is not recognised. */
+    const settingsWritesAfterRecovery = settingsMutates(cdp.requests, recoverySeq)
+      .filter((write) => write.url === "/api/settings/mutate" && write.ns === "ui-settings" && write.ops.length === 1 && write.ops[0].op === "set" && Array.isArray(write.ops[0].path) && write.ops[0].path.length === 1 && write.ops[0].path[0] === "enabled")
+      .map((write) => ({ seq: write.seq, rpcId: write.rpcId, ns: write.ns, expectedRevision: write.expectedRevision, enabledOps: [write.ops[0].value] }));
     evidence.reconnect.roundTripTraffic = {
       recoverySeq, oldUsedAfterRecovery, newMuxFramesAfterRecovery, muxAfterRoundTrip,
       apiRequestsAfterRecovery: apiAfterRecovery.map((request) => request.method + " " + request.url),
@@ -3249,6 +3239,512 @@ async function main() {
   evidence.preferences = preferencesEvidence;
   assertLiveTransport("afterInstancePreferences");
   assertNoStageErrors("afterInstancePreferences", true);
+
+
+  /* =====================================================================================================
+     Issue #7: the WHOLE settings surface of the installed artifact - every standard setting that is active
+     under this pinned build and this profile - inventoried from the running instance and driven through the
+     original page, instead of the handful of representative cases the earlier stages check. Two independent
+     lists are enumerated mechanically, from the two sides that are free to disagree: the namespaces the Host
+     says it serves (settings/describe) and the rows the settings panel itself renders. Every row and every
+     namespace is then either WRITTEN THROUGH THE PAGE in this run (with the namespace, the path and the value
+     the page itself sent) or named as an explicit gap with a reason, and the stage fails as soon as its own
+     computed gap list stops matching the committed one - so a namespace or a row that a later build adds
+     cannot quietly fall outside the inventory, and no report can claim coverage this run did not reach.
+     ----------------------------------------------------------------------------------------------------- */
+  /* The rows the pinned build renders in the settings panel. `coveredBy` names the stage that already drives
+     the row (and writes the namespace it belongs to); the rows nothing drives yet are driven by this stage.
+     The two rows with `writes: false` are the finding, not an omission: their click sends nothing at all, in
+     either mode, so the page keeps them to itself and the report says so rather than implying they persist. */
+  /* The inventory itself - the rows the panel renders, the pages the deployment ships, and the namespaces this
+     run deliberately does not drive - is declared once, in tools/lib/settings-surface.mjs, where the report
+     generator reads it too: the acceptance run cannot describe a different surface than the report prints. */
+  const SETTINGS_SURFACE_ROWS = SURFACE_ROWS;
+  const SETTINGS_SURFACE_GAPS = SURFACE_GAPS;
+  const SETTINGS_PLUGIN_PAGES = SURFACE_PLUGIN_PAGES;
+  const SETTINGS_PLUGIN_FIELDS = SURFACE_PLUGIN_FIELDS;
+  const inventoryOfRenderedPanel = surfaceRenderedInventory;
+  const settingsSurface = {};
+  evidence.settingsSurface = settingsSurface;
+  const surfaceRpc = () => rpcFor(instance.url);
+  /* What the instance serves for one namespace, and what it serves in total: the same public RPC the page
+     itself calls, read through the harness, so the two sides of every comparison below are independent. */
+  const surfaceDescribe = async () => {
+    const described = await surfaceRpc()("settings/describe", {});
+    if (described.ok !== true) throw new Error("the instance refused settings/describe: " + JSON.stringify(described).slice(0, 300));
+    return described.value;
+  };
+  const surfaceNamespaces = async () => namespaceFacts({ ok: true, value: await surfaceDescribe() });
+  const surfaceNamespace = async (ns) => namespaceOf(await surfaceNamespaces(), ns);
+  const surfaceMark = () => probeRequestMark();
+  const surfaceWritesSince = (mark, ns) => pageSettingsWrites(cdp.requests, mark).filter((write) => ns === undefined || write.ns === ns);
+  /* Which end a write came from: the whole point of the comparison is that the same page, the same build and
+     the same profile behave differently on the non-loopback origin, so every write stays attributed to one. */
+  const surfaceOriginOf = (write) => (String(write.authority).indexOf(TEST_HOST + ":") === 0 ? "remote" : "loopback");
+  const surfacePanel = {
+    rows: async () => JSON.parse(await cdp.eval(SURFACE_ROWS_PROBE)),
+    rowText: async (label) => String(await cdp.eval(surfaceRowTextExpression(label))),
+    open: async (label) => String(await cdp.eval(surfaceOpenExpression(label))),
+    menu: async () => JSON.parse(await cdp.eval(SURFACE_MENU_PROBE)),
+    pick: async (option) => String(await cdp.eval(surfacePickExpression(option))),
+    flip: async (label) => String(await cdp.eval(surfaceSwitchExpression(label))),
+    cube: async (label) => String(await cdp.eval(surfaceCubeExpression(label))),
+    cubeState: async (label) => String(await cdp.eval(surfaceCubeStateExpression(label))),
+    switchState: async (label) => String(await cdp.eval(surfaceSwitchStateExpression(label))),
+    press: async (label, aria) => String(await cdp.eval(surfaceAriaPressExpression(label, aria))),
+    english: async () => String(await cdp.eval(SURFACE_PANEL_ENGLISH_PROBE)),
+    clickExact: async (text) => String(await cdp.eval(surfaceExactClickExpression(text))),
+  };
+  /* The labels this stage drives are the build's English copy, and the panel's language is part of its state
+     (the preference stage leaves it in Chinese). The language row shows its CURRENT value in every language,
+     so "中文" is the control to click when the panel is not in English - no label of the language row has to
+     be known, and the document ends up in the copy the rest of this stage addresses rows by. */
+  const surfaceNormaliseLanguage = async () => {
+    if (await surfacePanel.english() === "english") return { changed: false, written: null, writes: 0 };
+    const mark = surfaceMark();
+    const clicked = await surfacePanel.clickExact("中文");
+    await sleep(1000);
+    const options = await surfacePanel.menu();
+    const picked = options.indexOf("English") === -1 ? "no-english-option" : await surfacePanel.pick("English");
+    await waitForValue(cdp, SURFACE_PANEL_ENGLISH_PROBE + " === \"english\"", "the settings panel's English copy", 25000);
+    await sleep(800);
+    const writes = surfaceWritesSince(mark).filter((write) => write.ns === "locale");
+    return { changed: true, clicked, options, picked, writes: writes.length, written: writes.length === 1 && Array.isArray(writes[0].ops) && writes[0].ops.length === 1 ? writes[0].ops[0].value : null };
+  };
+  /* The panel's sections are its own buttons; the drives below move between them and come back to General. */
+  const surfaceOpenSection = async (name) => {
+    const clicked = await surfacePanel.clickExact(name);
+    await sleep(2000);
+    return clicked;
+  };
+  /* One drive, two expectations. On the overlay's remote origin - and on the control's LOOPBACK origin - a
+     row's click has to reach the instance; on the control's remote origin the very same click has to stay in
+     the page. A drive records the row, the menu the page offered, the option it picked and every settings
+     write that left the page afterwards, and the checks below read those records, never the intent. */
+  const driveSurfaceRow = async (spec, expectation, leg) => {
+    const before = await surfaceNamespace(spec.ns);
+    const rowTextBefore = await surfacePanel.rowText(spec.label);
+    const stateBefore = spec.kind === "switch" ? await surfacePanel.switchState(spec.label) : spec.kind === "cubes" ? await surfacePanel.cubeState(spec.label) : null;
+    const panelCopyBefore = spec.ns === "locale" ? await surfacePanel.english() : null;
+    const mark = surfaceMark();
+    /* A row the page does not render cannot be clicked, and the original composition's remote document does not
+       render the rows it cannot read there: that absence is a MEASUREMENT this stage records (it is the other
+       half of the 本机/远程 matrix), not something to click around. */
+    const offered = rowTextBefore !== "NO-ROW";
+    let action = null;
+    let options = null;
+    let target = null;
+    if (offered === false) {
+      action = "row-not-offered";
+      await sleep(300);
+    } else if (spec.kind === "menu") {
+      action = await surfacePanel.open(spec.label);
+      await sleep(1200);
+      options = await surfacePanel.menu();
+      const others = options.filter((option) => rowTextBefore.indexOf(option) === -1);
+      target = others.length === 0 ? null : others[0];
+      action = target === null ? "no-other-option" : await surfacePanel.pick(target);
+    } else if (spec.kind === "stepper") {
+      action = await surfacePanel.press(spec.label, "Increase font size");
+    } else if (spec.kind === "cubes") {
+      action = await surfacePanel.cube(spec.label);
+      const clicked = /^CLICKED (.+)$/.exec(action);
+      target = clicked === null ? null : clicked[1];
+    } else {
+      action = await surfacePanel.flip(spec.label);
+    }
+    await sleep(2500);
+    const writes = surfaceWritesSince(mark);
+    const after = await surfaceNamespace(spec.ns);
+    const record = {
+      row: spec.label, kind: spec.kind, ns: spec.ns, path: spec.path, expectation, leg, offered, rowTextBefore, options, target, action, stateBefore,
+      stateAfter: spec.kind === "switch" ? await surfacePanel.switchState(spec.label) : spec.kind === "cubes" ? await surfacePanel.cubeState(spec.label) : null,
+      rowTextAfter: await surfacePanel.rowText(spec.label),
+      /* The language row's whole purpose is to re-render the page, so after its click the row is no longer
+         addressable by the English label this stage looks rows up with. What is read back for it is the panel's
+         own copy: whether the document now speaks the language that was just sent. */
+      panelCopy: spec.ns === "locale" ? await surfacePanel.english() : null,
+      panelCopyBefore: panelCopyBefore,
+      before, after,
+      writes: writes.map((write) => Object.assign(writeRecordOf(write), { origin: surfaceOriginOf(write) })),
+    };
+    settingsSurface.drives[leg].push(record);
+    return record;
+  };
+  /* Two questions are asked of every row - "does the page show what was just written?" and "did the page's own
+     copy move when nothing was written?" - and the answer depends on the control, so each kind answers both in
+     one place: a switch reports its own aria state, the appearance row's pressed cube IS the value it shows (its
+     text names all three cubes, so the pressed one is the only honest reading), a stepper has no option to name
+     so the row has to carry the NEW number, and a menu row has to carry the label the page's own menu offered. */
+  const SURFACE_ROW_READING = {
+    switch: {
+      shows: (record, expected) => record.stateAfter === String(expected),
+      moved: (record) => record.stateAfter !== record.stateBefore,
+    },
+    cubes: {
+      shows: (record, expected) => String(record.stateAfter).toLowerCase() === String(expected).toLowerCase(),
+      moved: (record) => record.stateAfter !== record.stateBefore,
+    },
+    stepper: {
+      shows: (record, expected) => String(record.rowTextAfter).indexOf(String(expected)) !== -1 && record.rowTextAfter !== record.rowTextBefore,
+      moved: (record) => record.rowTextAfter !== record.rowTextBefore,
+    },
+    menu: {
+      shows: (record) => String(record.rowTextAfter).indexOf(String(record.target)) !== -1,
+      moved: (record) => String(record.rowTextAfter).indexOf(String(record.target)) !== -1,
+    },
+  };
+  const surfaceRowShows = (record, expected) => SURFACE_ROW_READING[record.kind].shows(record, expected);
+  const surfaceRowMoved = (record) => SURFACE_ROW_READING[record.kind].moved(record);
+  /* What a drive has to have done, stated once for every row this stage drives, on either leg. */
+  const checkSurfaceDrive = (record) => {
+    if (record.expectation === "instance") {
+      const verdict = verifySettingsWrite(record, { kind: "mutate", ns: record.ns, path: [record.path], origin: record.leg });
+      const sent = verdict.write === null ? null : verdict.write.value;
+      check("the " + record.row + " row writes the instance through the page (" + record.leg + " origin): exactly one settings/mutate on " + record.ns + ".<" + record.path + ">, carrying the revision the page had read, and the Host moves by one revision", verdict.single && verdict.shape && verdict.origin && verdict.revision && verdict.moved, JSON.stringify({ problems: verdict.problems, notes: verdict.notes, writes: record.writes, before: record.before, after: record.after, target: record.target }));
+      check("the " + record.row + " row: the Host now holds the value the page sent, on the path it sent it to", verdict.stored && verdict.changed, JSON.stringify({ problems: verdict.problems, before: record.before === null ? null : record.before.value, after: record.after === null ? null : record.after.value, sent: sent }));
+      if (record.ns === "locale") {
+        const speaksSent = String(sent).toLowerCase().indexOf("zh") === 0 ? record.panelCopy !== "english" : record.panelCopy === "english";
+        check("the Language row shows the value it just sent: the panel now speaks the language that was chosen (the row's own label is no longer the English one this stage addresses rows by, so what is read back is the page's own copy)", speaksSent, JSON.stringify({ target: record.target, sent: sent, panelCopy: record.panelCopy, rowTextAfter: record.rowTextAfter }));
+      } else check("the " + record.row + " row shows the value it just sent", surfaceRowShows(record, sent), JSON.stringify({ target: record.target, after: record.rowTextAfter, stateAfter: record.stateAfter, sent: sent, before: record.stateBefore }));
+    } else {
+      const unmoved = record.before !== null && record.after !== null && JSON.stringify(record.after) === JSON.stringify(record.before);
+      check("CONTROL: using the " + record.row + " row on the non-loopback origin sends not one settings call from the page", record.writes.length === 0, JSON.stringify(record.writes));
+      check("CONTROL: using the " + record.row + " row leaves the instance exactly where it was - same value, same revision", unmoved, JSON.stringify({ before: record.before, after: record.after }));
+      /* Whether the row is even there is a measurement, not an assumption: the original provider cannot read the
+         host's settings on a non-loopback document, so some of these rows do not render at all. Both outcomes
+         are recorded - the report prints which one it was, per row and per origin. */
+      /* The language row is read from the page's own copy even here: its click re-renders the whole panel, so
+         after it the row is not addressable by the English label this stage looks rows up with - and "the page
+         changed language without telling the instance" is exactly the measurement that matters on this leg. */
+      const reading = record.offered === false
+        ? { name: "CONTROL: the original composition's remote page does not render the " + record.row + " row at all, so there is nothing to click and nothing to keep in the page", ok: record.action === "row-not-offered" && record.rowTextAfter === "NO-ROW" }
+        : record.ns === "locale"
+          ? { name: "CONTROL: the Language row is offered by the original composition's remote page, and using it only re-renders that page in the chosen language - not one settings write, and the page's own copy is what is compared", ok: record.panelCopy !== record.panelCopyBefore }
+          : { name: "CONTROL: the " + record.row + " row is offered by the original composition's remote page, and using it only moves the page's own copy of the value", ok: surfaceRowMoved(record) };
+      check(reading.name, reading.ok, JSON.stringify({ offered: record.offered, action: record.action, target: record.target, after: record.rowTextAfter, stateAfter: record.stateAfter, stateBefore: record.stateBefore, panelCopy: record.panelCopy, panelCopyBefore: record.panelCopyBefore }));
+    }
+  };
+  /* The rows the page keeps to itself: the click is made and the instance is read around it, on EITHER leg,
+     so what the report says about them is a measurement of that leg and not an assumption copied across. */
+  const driveSurfaceNoWriteRow = async (spec, leg) => {
+    const namespacesBefore = await surfaceNamespaces();
+    const rowTextBefore = await surfacePanel.rowText(spec.label);
+    const effectBefore = JSON.parse(await cdp.eval(SURFACE_EFFECT_PROBE));
+    const mark = surfaceMark();
+    const action = spec.kind === "action" ? await surfacePanel.press(spec.label, "Edit shortcuts") : await surfacePanel.open(spec.label);
+    let detail = null;
+    if (spec.kind === "menu") {
+      await sleep(1200);
+      const options = await surfacePanel.menu();
+      const others = options.filter((option) => rowTextBefore.indexOf(option) === -1);
+      detail = { options, target: others.length === 0 ? null : others[0] };
+      detail.action = detail.target === null ? "no-other-option" : await surfacePanel.pick(detail.target);
+    }
+    await sleep(2500);
+    const namespacesAfter = await surfaceNamespaces();
+    const effectAfter = JSON.parse(await cdp.eval(SURFACE_EFFECT_PROBE));
+    const record = {
+      row: spec.label, kind: spec.kind, leg: leg, reason: spec.reason, offered: rowTextBefore !== "NO-ROW", action, detail, rowTextBefore,
+      rowTextAfter: spec.kind === "action" ? null : await surfacePanel.rowText(spec.label),
+      effectBefore, effectAfter,
+      writes: surfaceWritesSince(mark).map((write) => ({ ns: write.ns, kind: write.kind, origin: surfaceOriginOf(write) })),
+      instanceUnchanged: JSON.stringify(namespaceSummary(namespacesBefore)) === JSON.stringify(namespaceSummary(namespacesAfter)),
+    };
+    settingsSurface.noWriteRows = (settingsSurface.noWriteRows || []).concat([record]);
+    /* The negative claim comes FIRST in the pair below, but it is only worth reading when the interaction
+       happened: a selector that stopped matching would otherwise read as "using this control writes nothing",
+       which is the one way this row could lie. So the interaction is measured too - and on a leg where the row
+       is not offered at all, the honest measurement is that there was nothing to click. */
+    const effectHappened = spec.kind === "action"
+      ? action === "PRESSED" && (effectAfter.dialogs > effectBefore.dialogs || effectAfter.panel !== effectBefore.panel || effectAfter.docLength !== effectBefore.docLength || effectAfter.docTail !== effectBefore.docTail)
+      : action === "OPENED" && detail !== null && detail.options.length > 0 && detail.action === "PICKED" && record.rowTextAfter !== record.rowTextBefore;
+    record.interaction = record.offered === false ? "row-not-offered" : (effectHappened ? "clicked" : "not-effective");
+    check(record.offered === false
+      ? "the " + spec.label + " row is not offered on the " + leg + " origin at all, so there is nothing to click there and nothing it could write"
+      : "the " + spec.label + " row really was used on the " + leg + " origin (" + (spec.kind === "action" ? "the button was pressed and the page changed" : "the menu opened, an option other than the current one was picked, and the row copy moved") + ") - so that what follows is a measurement of a click that happened",
+      record.offered === false ? action === "NO-ROW" && JSON.stringify(effectBefore) === JSON.stringify(effectAfter) : effectHappened === true,
+      JSON.stringify({ offered: record.offered, action, detail, rowTextBefore: record.rowTextBefore, rowTextAfter: record.rowTextAfter, effectBefore, effectAfter }));
+    check("the " + spec.label + " row is not an instance setting: using it on the " + leg + " origin sends no settings write at all", record.writes.length === 0, JSON.stringify(record.writes));
+    check("the " + spec.label + " row leaves the instance untouched on the " + leg + " origin - every namespace keeps its value and its revision", record.instanceUnchanged === true, "namespaces=" + namespaceSummary(namespacesAfter).length);
+    return record;
+  };
+  /* The namespaces this stage drives, and the ones the page keeps to itself. `coveredBy` marks the rows an
+     earlier stage already drives (and whose namespace that stage writes): they stay in the inventory - the
+     ledger below counts their writes too - but this stage does not repeat their clicks. */
+  /* Every row that writes something, INCLUDING the ones an earlier stage already drives: the matrix has to be
+     measured per leg for the same rows on both origins, and "an earlier stage drove it" is a note in the report,
+     not a licence to leave this stage's own cells empty. */
+  const SURFACE_DRIVEN = SETTINGS_SURFACE_ROWS.filter((spec) => spec.writes !== false);
+  const SURFACE_NO_WRITE = SETTINGS_SURFACE_ROWS.filter((spec) => spec.writes === false);
+  /* The language row is driven LAST on every leg: choosing a language re-renders the whole panel in it, and every
+     other label this stage addresses rows by is the build's own English copy. Right after it the panel is put
+     back into English, and that step is recorded rather than hidden, because it is a second write on purpose. */
+  const SURFACE_DRIVE_ORDER = SURFACE_DRIVEN.filter((spec) => spec.ns !== "locale").concat(SURFACE_DRIVEN.filter((spec) => spec.ns === "locale"));
+  /* The instance was restarted by the stage above, so the authority this stage works on is re-derived here. */
+  const surfacePort = new URL(instance.url);
+  const surfaceRemoteUrl = "http://" + TEST_HOST + ":" + surfacePort.port + "/" + surfacePort.search;
+  settingsSurface.remoteUrl = surfaceRemoteUrl;
+  settingsSurface.drives = { remote: [], loopback: [] };
+  /* Opens the standard settings panel on a document of this authority. The onboarding notice is dismissed
+     first (settlePage), which is also the one place ui-settings-general is written from the page. */
+  const openSurfacePanel = async (url, label, shot) => {
+    await navigate(url);
+    await waitFor(cdp, SHELL_PROBE, "app shell (" + label + ")", 60000);
+    await settlePage(label);
+    await openSettings(cdp, shot);
+    return await surfaceNormaliseLanguage();
+  };
+  settingsSurface.language = await openSurfacePanel(surfaceRemoteUrl, "the settings surface on the non-loopback origin", join(EVIDENCE_DIR, MODE + "-21-settings-surface.png"));
+  const surfaceRendered = await surfacePanel.rows();
+  const surfaceRowInventory = inventoryOfRenderedPanel(surfaceRendered);
+  settingsSurface.rowsRendered = surfaceRendered;
+  settingsSurface.renderedInventory = surfaceRowInventory;
+  const surfaceMissing = SETTINGS_SURFACE_ROWS.filter((spec) => surfaceRowInventory.rows.every((entry) => entry.label !== spec.label)).map((spec) => spec.label);
+  /* "Exactly once" is a STRUCTURAL claim: the row texts above are deduplicated by their own copy, so two
+     identical rows would read as one. This counts the row BLOCKS per label instead (the divs whose text starts
+     with the label and which own a control, minus the ones another match contains), which is what makes a page
+     that renders the same row twice fail instead of passing. */
+  const surfaceRowCounts = {};
+  for (const spec of SETTINGS_SURFACE_ROWS) surfaceRowCounts[spec.label] = Number(await cdp.eval(surfaceRowCountExpression(spec.label)));
+  settingsSurface.rowCounts = surfaceRowCounts;
+  const surfaceRowCountOffenders = SETTINGS_SURFACE_ROWS.filter((spec) => (MODE === "overlay" || surfaceRowInventory.rows.some((entry) => entry.label === spec.label)) && surfaceRowCounts[spec.label] !== 1).map((spec) => spec.label + "=" + surfaceRowCounts[spec.label]);
+  check(MODE === "overlay"
+    ? "every row of the standard settings panel is rendered as exactly ONE row block on the non-loopback origin - a page that rendered one of them twice would be a second control for the same setting, and this counts blocks rather than copies"
+    : "CONTROL: every row the original composition renders on the non-loopback origin is rendered as exactly one row block there, and the rows it does not render count zero",
+    surfaceRowCountOffenders.length === 0, JSON.stringify({ counts: surfaceRowCounts, offenders: surfaceRowCountOffenders }));
+  const surfaceRowsOffered = surfaceRowInventory.rows.map((entry) => entry.label);
+  settingsSurface.rowsOfferedRemote = surfaceRowsOffered;
+  /* Two directions, because "all rows are here" and "nothing else is here" are different claims - and because
+     the original composition's remote document reads a different subset (it cannot reach the host's settings
+     there), which is a measurement this stage records rather than assumes. */
+  if (MODE === "overlay") {
+    check("the pinned build renders every settings row this inventory is recorded with, exactly once (" + SETTINGS_SURFACE_ROWS.length + " rows), so the report describes the panel the build really has", surfaceMissing.length === 0 && surfaceRowInventory.duplicated.length === 0, JSON.stringify({ missing: surfaceMissing, duplicated: surfaceRowInventory.duplicated, rendered: surfaceRendered.length }));
+  } else {
+    check("CONTROL: the original composition's remote page renders " + surfaceRowsOffered.length + " of the " + SETTINGS_SURFACE_ROWS.length + " recorded rows (" + surfaceRowsOffered.join(", ") + "); which ones is a measurement the report prints, not an assumption", surfaceRowsOffered.length > 0 && surfaceRowInventory.duplicated.length === 0, JSON.stringify({ offered: surfaceRowsOffered, rendered: surfaceRendered.length }));
+  }
+  check("the panel renders nothing this inventory does not know: whatever else it draws has to be the panel's own chrome (its navigation, close button, the rows' inline controls, and the page's own \"settings are unavailable\" notice), so a settings row added by a later build fails here instead of leaving the report's claim behind", surfaceRowInventory.unknown.length === 0, JSON.stringify({ unknown: surfaceRowInventory.unknown, chrome: surfaceRowInventory.chrome, rows: surfaceRowInventory.rows.length }));
+  /* The rows nothing drove yet, clicked on the non-loopback origin: the overlay has to reach the instance
+     from here, the original composition may not. */
+  for (const spec of SURFACE_DRIVE_ORDER) checkSurfaceDrive(await driveSurfaceRow(spec, MODE === "overlay" ? "instance" : "page", "remote"));
+  settingsSurface.languageAfterRemoteDrive = await surfaceNormaliseLanguage();
+  /* The Agent presets section is not a row but a whole section of the same panel, and it writes through
+     settings/update rather than settings/mutate: leaving it out of the inventory would leave a standard
+     setting out of the report. */
+  const driveSurfacePresetDefault = async (expectation, leg) => {
+    const section = await surfaceOpenSection("Agent presets");
+    const before = await surfaceNamespace(SURFACE_PRESET_NS);
+    const mark = surfaceMark();
+    /* The page's own buttons carry their meaning in aria-labels: the one that sets a new-task default names the
+       preset it would set, and the ones already set say so through aria-pressed. */
+    const clicked = await cdp.eval("(function () { var vis = function (e) { return !!e && e.offsetParent !== null; }; var hit = Array.prototype.slice.call(document.querySelectorAll(\"button\")).filter(vis).filter(function (b) { return String(b.getAttribute(\"aria-label\") || \"\").indexOf(\"Set as new task default:\") === 0 && b.getAttribute(\"aria-pressed\") !== \"true\"; })[0]; if (!hit) return \"no-other-preset\"; hit.click(); return \"clicked \" + hit.getAttribute(\"aria-label\"); })()");
+    await sleep(2500);
+    const writes = surfaceWritesSince(mark).filter((write) => write.ns === SURFACE_PRESET_NS);
+    const record = { row: "Agent presets: the new-task default", section, clicked, expectation, leg, before, after: await surfaceNamespace(SURFACE_PRESET_NS), writes: writes.map((write) => Object.assign(writeRecordOf(write), { origin: surfaceOriginOf(write) })) };
+    settingsSurface.drives[leg].push(record);
+    return record;
+  };
+  /* The Agent presets section writes through settings/update rather than settings/mutate, and that path is NOT
+     the settings provider: the ORIGINAL composition's non-loopback page writes the new-task default too (this run
+     measures it, see the ledger check below). So both modes expect the same thing on this leg, and the point of
+     the control run is that the replacement did not change it. */
+  const surfacePreset = await driveSurfacePresetDefault("instance", "remote");
+  const surfacePresetVerdict = verifySettingsWrite(surfacePreset, { kind: "update", ns: SURFACE_PRESET_NS, path: ["selectedDefault"], origin: "remote" });
+  check("the Agent presets section writes the instance through the page on the non-loopback origin in BOTH modes: one settings/update on " + SURFACE_PRESET_NS + " carrying the preset the page offered, and the Host holds it", surfacePresetVerdict.single && surfacePresetVerdict.shape && surfacePresetVerdict.origin && surfacePresetVerdict.stored && surfacePresetVerdict.changed, JSON.stringify({ problems: surfacePresetVerdict.problems, clicked: surfacePreset.clicked, writes: surfacePreset.writes, before: surfacePreset.before, after: surfacePreset.after }));
+  /* Back to the General section for the two rows the page keeps to itself. */
+  settingsSurface.backToGeneral = await surfaceOpenSection("General");
+  for (const spec of SURFACE_NO_WRITE) await driveSurfaceNoWriteRow(spec, "remote");
+  /* A fresh document on the same authority: with the replacement the rows read the INSTANCE's values back, with
+     the original composition they come back to the values the document started with, because the page kept
+     them to itself. */
+  settingsSurface.languageAfterReload = await openSurfacePanel(surfaceRemoteUrl, "the settings surface after a reload", join(EVIDENCE_DIR, MODE + "-22-settings-surface-after-reload.png"));
+  const surfaceReadBack = [];
+  for (const spec of SURFACE_DRIVEN) {
+    const record = settingsSurface.drives.remote.filter((entry) => entry.row === spec.label)[0];
+    const state = spec.kind === "switch" ? await surfacePanel.switchState(spec.label) : spec.kind === "cubes" ? await surfacePanel.cubeState(spec.label) : null;
+    const rowText = await surfacePanel.rowText(spec.label);
+    const stored = await surfaceNamespace(spec.ns);
+    const entry = { row: spec.label, rowText, state, offered: rowText !== "NO-ROW", target: record.target, rowTextBefore: record.rowTextBefore, storedValue: spec.path === null ? null : stored.value[spec.path] };
+    surfaceReadBack.push(entry);
+    /* The language row is read differently ON PURPOSE on both legs: this stage moves the panel's language and
+       then puts it back into English so the rest of the panel can be addressed by its English labels. What the
+       reload can prove here is what the INSTANCE holds, not which copy the row displays. */
+    if (spec.ns === "locale") {
+      const readBack = { rowText, stored: stored.value, before: record.before === null ? null : record.before.value, normalised: MODE === "overlay" ? settingsSurface.languageAfterRemoteDrive : null };
+      settingsSurface.readBackLanguage = readBack;
+      if (MODE === "overlay") check("after a reload the Language row reads its value from the instance, which holds what this stage's own normalisation wrote there", settingsSurface.languageAfterRemoteDrive.written === null || JSON.stringify(stored.value[spec.path]) === JSON.stringify(settingsSurface.languageAfterRemoteDrive.written), JSON.stringify(readBack));
+      else check("CONTROL: the non-loopback click left the instance's language exactly where it was - the reloaded document only shows the English copy this stage normalises to", record.before !== null && JSON.stringify(stored.value) === JSON.stringify(record.before.value), JSON.stringify(readBack));
+      continue;
+    }
+    if (MODE === "overlay") check("after a reload the " + spec.label + " row reads the instance's own value back", spec.kind === "switch" ? state === String(record.writes[0].value) : spec.kind === "cubes" ? String(state).toLowerCase() === String(record.writes[0].value).toLowerCase() : spec.kind === "stepper" ? rowText.indexOf(String(record.writes[0].value)) !== -1 : rowText.indexOf(record.target) !== -1, JSON.stringify({ entry: entry, sent: record.writes[0].value }));
+    else if (record.offered === true) check("CONTROL: after a reload the " + spec.label + " row is back to the value it started from - the page kept it and the instance never had it", spec.kind === "switch" || spec.kind === "cubes" ? state === record.stateBefore : rowText === record.rowTextBefore, JSON.stringify({ entry: entry, stateBefore: record.stateBefore }));
+    else check("CONTROL: after a reload the " + spec.label + " row is still not rendered by the original composition's remote page", rowText === "NO-ROW", JSON.stringify({ entry: entry, offered: record.offered }));
+  }
+  settingsSurface.readBackAfterReload = surfaceReadBack;
+  /* The other half of the 本机/远程 matrix: the SAME page on the LOOPBACK origin. There the original composition
+     already stores settings on the instance (the provider only keeps them in the page on a non-loopback
+     document), so this leg is the non-regression half of the claim - the replacement must not change what a
+     loopback page does. BOTH modes drive it, and the report compares the two legs item by item: a difference
+     between them would be a behaviour change the replacement introduced where none was asked for. */
+  settingsSurface.languageOnLoopback = await openSurfacePanel(instance.url, "the settings surface on the LOOPBACK origin", join(EVIDENCE_DIR, MODE + "-23-settings-surface-loopback.png"));
+  for (const spec of SURFACE_DRIVE_ORDER) checkSurfaceDrive(await driveSurfaceRow(spec, "instance", "loopback"));
+  settingsSurface.languageAfterLoopbackDrive = await surfaceNormaliseLanguage();
+  const surfaceLoopbackPreset = await driveSurfacePresetDefault("instance", "loopback");
+  const surfaceLoopbackPresetVerdict = verifySettingsWrite(surfaceLoopbackPreset, { kind: "update", ns: SURFACE_PRESET_NS, path: ["selectedDefault"], origin: "loopback" });
+  check("the Agent presets section writes the instance from the loopback origin as well: one settings/update on " + SURFACE_PRESET_NS + ", read back from the Host", surfaceLoopbackPresetVerdict.single && surfaceLoopbackPresetVerdict.shape && surfaceLoopbackPresetVerdict.origin && surfaceLoopbackPresetVerdict.stored && surfaceLoopbackPresetVerdict.changed, JSON.stringify({ problems: surfaceLoopbackPresetVerdict.problems, clicked: surfaceLoopbackPreset.clicked, writes: surfaceLoopbackPreset.writes }));
+  /* The two rows the page keeps to itself are measured on this leg too: the report prints one observation per
+     origin instead of copying the remote one into all four cells. The panel is back on the General section. */
+  settingsSurface.backToGeneralOnLoopback = await surfaceOpenSection("General");
+  for (const spec of SURFACE_NO_WRITE) await driveSurfaceNoWriteRow(spec, "loopback");
+  /* The deployment's own configuration pages in the plugin manager. With the replacement they are offered and
+     their forms write the instance through the standard slot; with the original composition the very same
+     pages are not offered on a remote origin at all. */
+  const surfaceNumberCandidates = (value) => {
+    const current = Number(value);
+    const base = Number.isFinite(current) ? current : 1;
+    return [base + 1, base - 1, 2, 3, 5, 10].map((candidate) => String(candidate)).filter((candidate) => Number(candidate) > 0 && Number(candidate) !== base).filter((candidate, index, all) => all.indexOf(candidate) === index);
+  };
+  const driveSurfacePluginField = async (page, field, leg) => {
+    /* Each page is opened on a DOCUMENT OF ITS OWN: opening a card replaces the plugin list, and the nav button
+       does not bring the list back, so driving two pages from one document would look for the second page in a
+       list that is no longer there. The leg picks the authority: the same form has to write the instance from
+       the non-loopback document (the capability this repository adds) and from the loopback document (where
+       the original composition already does it), which is what makes the plugin table a two-ended matrix. */
+    await navigate(leg === "loopback" ? instance.url : surfaceRemoteUrl);
+    await waitFor(cdp, SHELL_PROBE, "app shell (" + page.title + " page, " + leg + " origin)", 60000);
+    const opened = await openItemPage("driving the " + page.title + " page on the " + leg + " origin", page.title, field.fieldId);
+    const before = await surfaceNamespace(page.ns);
+    const fieldBefore = fieldOf(await pageFields([field.fieldId]), field.fieldId);
+    let chosen = null;
+    for (const candidate of surfaceNumberCandidates(fieldBefore.value)) {
+      await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(field.fieldId) + ")", candidate);
+      const readback = fieldOf(await pageFields([field.fieldId]), field.fieldId);
+      const save = await pageSave();
+      chosen = { candidate, value: readback.value, invalid: readback.invalid, message: readback.message, save };
+      if (save.present === true && save.disabled === false) break;
+    }
+    const mark = surfaceMark();
+    const clicked = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await sleep(2500);
+    const writes = surfaceWritesSince(mark);
+    return {
+      page: page.title, field: field.label, leg: leg, ns: page.ns, path: field.path, fieldId: field.fieldId, opened: { items: opened.items.length, fieldIds: opened.detail.fieldIds, configCount: opened.detail.configCount },
+      fieldBefore, chosen, clicked, before, after: await surfaceNamespace(page.ns),
+      writes: writes.map((write) => Object.assign(writeRecordOf(write), { origin: surfaceOriginOf(write) })),
+    };
+  };
+  /* One plugin page on one leg: the page's own validation accepted the value, exactly one settings/mutate left the
+     page through that leg's origin, and the Host holds what the form sent. The write's shape is the shared
+     validator's business, so this stage and the report generator read it the same way. */
+  const checkSurfacePluginField = (driven, leg) => {
+    const verdict = verifySettingsWrite(driven, { kind: "mutate", ns: driven.ns, path: [driven.path], origin: leg });
+    const sent = verdict.write === null ? null : verdict.write.value;
+    const held = verdict.write !== null && driven.before !== null && driven.after !== null && Number(driven.before.value[driven.path]) !== Number(sent) && Number(driven.after.value[driven.path]) === Number(sent);
+    check("the deployment's own " + driven.page + " page writes " + driven.ns + " through the standard configuration form (" + leg + " origin): the page's own validation accepts the value it was given, one settings/mutate leaves the page, and the Host holds that number", verdict.single && verdict.shape && verdict.origin && held && driven.clicked === "clicked", JSON.stringify({ problems: verdict.problems, chosen: driven.chosen, writes: driven.writes, before: driven.before, after: driven.after }));
+  };
+  /* A document of its own: the settings panel is a dialog, and dismiss() has nothing to dismiss in it, so the
+     page has to be rebuilt (which closes the panel) before the plugin manager is driven. */
+  await navigate(surfaceRemoteUrl);
+  await waitFor(cdp, SHELL_PROBE, "app shell (the plugin pages)", 60000);
+  await settlePage("the plugin pages");
+  const surfacePluginNav = await cdp.eval("window.__e2ePlugins.openPlugins()");
+  await sleep(3000);
+  const surfacePluginListed = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.items())"));
+  settingsSurface.pluginPagesListed = surfacePluginListed;
+  if (MODE === "overlay") {
+    const surfaceExpectedTitles = SETTINGS_PLUGIN_PAGES.map((page) => page.title);
+    const surfaceMissingPages = surfaceExpectedTitles.filter((title) => surfacePluginListed.some((text) => text.indexOf(title) !== -1) === false);
+    check("the plugin manager lists exactly the deployment's own configuration pages this inventory is recorded with", surfacePluginNav === "clicked" && surfaceMissingPages.length === 0 && surfacePluginListed.length === surfaceExpectedTitles.length, JSON.stringify({ listed: surfacePluginListed, missing: surfaceMissingPages }));
+    for (const field of SETTINGS_PLUGIN_FIELDS) {
+      const page = SETTINGS_PLUGIN_PAGES.filter((entry) => entry.title === field.page)[0];
+      const driven = await driveSurfacePluginField(page, field, "remote");
+      settingsSurface.pluginFields = (settingsSurface.pluginFields || []).concat([driven]);
+      checkSurfacePluginField(driven, "remote");
+    }
+  } else {
+    const surfaceOffered = SETTINGS_PLUGIN_PAGES.map((page) => page.title).filter((title) => surfacePluginListed.some((text) => text.indexOf(title) !== -1));
+    const surfaceOpens = [];
+    for (const page of SETTINGS_PLUGIN_PAGES) surfaceOpens.push({ title: page.title, opened: await cdp.eval("window.__e2ePlugins.openItem(" + JSON.stringify(page.title) + ")") });
+    settingsSurface.pluginPagesControl = { navigated: surfacePluginNav, listed: surfacePluginListed, offered: surfaceOffered, opens: surfaceOpens };
+    check("CONTROL: the original composition offers none of the deployment's own configuration pages on a remote origin, and none of them can be opened", surfacePluginNav === "clicked" && surfaceOffered.length === 0 && surfaceOpens.every((entry) => entry.opened === "no-card"), JSON.stringify(settingsSurface.pluginPagesControl));
+  }
+  /* The LOOPBACK half of the plugin table. The original composition already writes the instance from a loopback
+     document, so BOTH modes drive these pages here and the report compares them item by item: the same four
+     pages, the same fields, the same namespaces and paths. That comparison is the non-regression half of the claim - the
+     replacement was not asked to change what a loopback page can do. */
+  const surfaceLoopbackPluginListing = await (async () => {
+    await navigate(instance.url);
+    await waitFor(cdp, SHELL_PROBE, "app shell (the plugin pages on the loopback origin)", 60000);
+    await settlePage("the plugin pages on the loopback origin");
+    const navigated = await cdp.eval("window.__e2ePlugins.openPlugins()");
+    await sleep(3000);
+    return { navigated: navigated, listed: JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.items())")) };
+  })();
+  settingsSurface.pluginPagesListingLoopback = surfaceLoopbackPluginListing;
+  const surfaceLoopbackPages = SETTINGS_PLUGIN_PAGES.map((page) => page.title);
+  const surfaceLoopbackPagesMissing = surfaceLoopbackPages.filter((title) => surfaceLoopbackPluginListing.listed.some((text) => text.indexOf(title) !== -1) === false);
+  check("on the LOOPBACK origin the plugin manager offers the deployment's own configuration pages in BOTH modes (" + surfaceLoopbackPages.join(", ") + ")", surfaceLoopbackPluginListing.navigated === "clicked" && surfaceLoopbackPagesMissing.length === 0, JSON.stringify({ listed: surfaceLoopbackPluginListing.listed, missing: surfaceLoopbackPagesMissing }));
+  for (const field of SETTINGS_PLUGIN_FIELDS) {
+    const page = SETTINGS_PLUGIN_PAGES.filter((entry) => entry.title === field.page)[0];
+    const driven = await driveSurfacePluginField(page, field, "loopback");
+    settingsSurface.pluginFields = (settingsSurface.pluginFields || []).concat([driven]);
+    checkSurfacePluginField(driven, "loopback");
+  }
+  /* ---- the ledger: what this run wrote through the page, from which end, and what it did not ---- */
+  const surfaceAllWrites = pageSettingsWrites(cdp.requests, 0);
+  const surfaceWrittenNames = writtenNamespaces(surfaceAllWrites);
+  const surfaceFromRemote = writtenNamespaces(surfaceAllWrites.filter((write) => surfaceOriginOf(write) === "remote"));
+  const surfaceFromLoopback = writtenNamespaces(surfaceAllWrites.filter((write) => surfaceOriginOf(write) === "loopback"));
+  const surfaceServed = (await surfaceNamespaces()).map((fact) => fact.ns);
+  const surfaceNotWritten = surfaceServed.filter((ns) => surfaceWrittenNames.indexOf(ns) === -1).sort();
+  const surfaceGapNames = SETTINGS_SURFACE_GAPS.map((gap) => gap.ns).sort();
+  settingsSurface.coverage = { served: surfaceServed, writtenThroughThePage: surfaceWrittenNames.slice().sort(), writtenFromRemote: surfaceFromRemote, writtenFromLoopback: surfaceFromLoopback, notWritten: surfaceNotWritten, gaps: SETTINGS_SURFACE_GAPS };
+  if (MODE === "overlay") {
+    check("every settings namespace this instance serves is either written through the page in this run or named as an explicit gap - there is no third state, so the inventory cannot quietly leave one out", JSON.stringify(surfaceNotWritten) === JSON.stringify(surfaceGapNames), JSON.stringify({ notWritten: surfaceNotWritten, gaps: surfaceGapNames }));
+    check("each namespace in that gap list carries the reason the report prints for it", SETTINGS_SURFACE_GAPS.every((gap) => typeof gap.reason === "string" && gap.reason.length > 0), JSON.stringify(SETTINGS_SURFACE_GAPS.map((gap) => gap.ns)));
+  } else {
+    const surfaceControlNamespaces = Array.from(new Set(SURFACE_DRIVEN.map((spec) => spec.ns))).concat([SURFACE_PRESET_NS]);
+    const surfaceStillMissing = surfaceControlNamespaces.filter((ns) => surfaceFromLoopback.indexOf(ns) === -1);
+    /* The one write the ORIGINAL composition does make from that origin is the preset default, through
+       settings/update rather than through the settings provider. Measured and recorded rather than assumed away;
+       the report generator then compares that set with the replacement's own run on the same leg. */
+    check("CONTROL: the only settings write that reaches the instance from the non-loopback origin is the Agent presets default - the one the original composition writes from there as well, because that path is not the settings provider", JSON.stringify(surfaceFromRemote) === JSON.stringify([SURFACE_PRESET_NS]), JSON.stringify(surfaceFromRemote));
+    check("CONTROL: the same rows DO write the instance once the identical page is on the loopback origin", surfaceStillMissing.length === 0, JSON.stringify({ expected: surfaceControlNamespaces, writtenFromLoopback: surfaceFromLoopback }));
+  }
+  /* ---- and the values, read on the INSTANCE side after a restart ---- */
+  const surfaceStoredBeforeRestart = {};
+  for (const spec of SURFACE_DRIVEN) surfaceStoredBeforeRestart[spec.ns] = (await surfaceNamespace(spec.ns)).value;
+  discontinue("instance restart");
+  instance.child.kill("SIGTERM");
+  await sleep(3000);
+  instance = await startInstance(home, PROFILE);
+  remoteRpc = rpcFor(instance.url);
+  const surfaceStoredAfterRestart = {};
+  for (const spec of SURFACE_DRIVEN) surfaceStoredAfterRestart[spec.ns] = (await surfaceNamespace(spec.ns)).value;
+  settingsSurface.restart = { before: surfaceStoredBeforeRestart, after: surfaceStoredAfterRestart };
+  const surfaceLostOnRestart = SURFACE_DRIVEN.filter((spec) => JSON.stringify(surfaceStoredAfterRestart[spec.ns]) !== JSON.stringify(surfaceStoredBeforeRestart[spec.ns])).map((spec) => spec.label);
+  check(MODE === "overlay" ? "every value the rows of this stage wrote on the instance is still there after a restart of the instance" : "CONTROL: the values the loopback end stored are still there after a restart too (the original composition stores them the moment the origin is loopback)", surfaceLostOnRestart.length === 0, JSON.stringify({ lost: surfaceLostOnRestart }));
+  const surfaceRestartPort = new URL(instance.url);
+  await navigate("http://" + TEST_HOST + ":" + surfaceRestartPort.port + "/" + surfaceRestartPort.search);
+  await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin after the inventory restart", 60000);
+  await openSettings(cdp, join(EVIDENCE_DIR, MODE + "-24-settings-surface-after-restart.png"));
+  settingsSurface.languageAfterRestart = await surfaceNormaliseLanguage();
+  const surfaceRowsAfterRestart = await surfacePanel.rows();
+  const surfaceRestartInventory = inventoryOfRenderedPanel(surfaceRowsAfterRestart);
+  settingsSurface.renderedInventoryAfterRestart = surfaceRestartInventory;
+  const surfaceRestartOffered = surfaceRestartInventory.rows.map((entry) => entry.label);
+  /* The panel after the restart is the panel of the composition under test, read on the same non-loopback origin
+     as the first reading: the replacement has to render the recorded rows again, and the original composition has
+     to render the same SUBSET it rendered before - a restart must not change what either of them can see. */
+  check(MODE === "overlay"
+    ? "after the inventory restart the standard settings panel still opens on the non-loopback origin and renders exactly the rows this inventory is recorded with"
+    : "CONTROL: after the restart the original composition's non-loopback page renders the same rows as before - the restart changes none of them",
+    surfaceRestartInventory.unknown.length === 0 && surfaceRestartInventory.duplicated.length === 0 && (MODE === "overlay"
+      ? surfaceRestartInventory.rows.length === SETTINGS_SURFACE_ROWS.length
+      : JSON.stringify(surfaceRestartOffered.slice().sort()) === JSON.stringify(surfaceRowsOffered.slice().sort())),
+    JSON.stringify({ rendered: surfaceRestartOffered, before: surfaceRowsOffered, missing: surfaceRestartInventory.unknown, duplicated: surfaceRestartInventory.duplicated }))
+  assertLiveTransport("afterSettingsSurface");
+  assertNoStageErrors("afterSettingsSurface", true);
 
   /* The instance-preference stage above resets its own accounting before it finishes, so nothing disruptive is
      left between the last stage and this point: the final stage tolerates nothing. */

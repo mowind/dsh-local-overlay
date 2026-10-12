@@ -2,7 +2,10 @@
 
 在固定的 DSH 基线上，用**自有设置组件**加**自有 Web 组合包**的临时实例，验证一个可行性门槛：在**访问端**的原设置页上修改一个即时保存的设置，刷新、重新连接、实例重启后仍然保留。
 
-对应 Issue #2；背景与边界见 [CONTEXT.md](CONTEXT.md) 与 [docs/adr/](docs/adr/)。本仓是验证覆盖层：它不改动安装中的 DSH，也不修改上游源码。
+对应 Issue #2（后续 #3–#7 在同一覆盖层上继续验证）；背景与边界见 [CONTEXT.md](CONTEXT.md) 与 [docs/adr/](docs/adr/)。本仓是验证覆盖层：它不改动安装中的 DSH，也不修改上游源码。
+
+- 全范围清单与能力矩阵、逐区域回归证据：[docs/compatibility-report.md](docs/compatibility-report.md)
+- 安装、切换、重启、升级复核与终端兜底：[docs/release-guide.md](docs/release-guide.md)
 
 ## 基线身份与许可
 
@@ -23,6 +26,10 @@
 | [tools/verify-artifacts.mjs](tools/verify-artifacts.mjs) | 来源预检的 CLI：核对记录与实际安装（含构建身份），不一致则失败退出 |
 | [tools/lib/preflight.mjs](tools/lib/preflight.mjs) | 预检实现：`verify-artifacts.mjs` 与 `overlay.mjs` 共用同一份检查，不是两份实现 |
 | [tools/e2e-remote-settings.mjs](tools/e2e-remote-settings.mjs) | 端到端验证：真实打包产物 + 终端入口安装 + 隔离 profile + 真实浏览器 |
+| [tools/lib/settings-surface.mjs](tools/lib/settings-surface.mjs) | 设置面清单（面板每一行、部署自带配置页、显式缺口表）与页面读写解析：验收跑与报告生成器共用同一份实现 |
+| [tools/settings-report.mjs](tools/settings-report.mjs) | 从证据渲染 §5 清单与能力矩阵（fail-closed，不连实例） |
+| [docs/compatibility-report.md](docs/compatibility-report.md) | 兼容性与发布验证报告：逐区域回归、标准第三方配置机制、范围外项、全范围清单与能力矩阵（§5 机器生成） |
+| [docs/release-guide.md](docs/release-guide.md) | 发布使用说明：首次安装、profile 切换、按需重启、升级复核、终端兜底、部署前置条件与未完成项 |
 | [evidence/](evidence/) | 最近一次 `control` 与 `overlay` 的证据（JSON + 截图） |
 | [docs/adr/](docs/adr/) | ADR-0001 版本绑定替换；ADR-0002 单所有者认证边界；ADR-0003 构建身份核验与失败关闭 |
 
@@ -188,6 +195,16 @@ DSH_PROFILE=e2e node tools/e2e-remote-settings.mjs --mode overlay # 覆盖组：
 `/api` 上的 fence 判定为可信 Host 无 cookie 401、loopback 无 cookie 401、未知 Host 403、未知 Host **带已认证 cookie 仍 403**、可信 Host 带同一枚 cookie 404（fence 与认证都过了，只是这个探针路由不存在）、同一枚 cookie 重放到 loopback authority 401、单独 `Origin` 403、单独 `Sec-Fetch-Site` 403、两者同时 403、这两个信号各自**再带 cookie** 仍是 403、`Origin` 与 Host 相同的对照 401；`/api/remote.mux` 的三次 WebSocket 升级尝试分别是 403、401 与**真的升级成功**（101）；文档带 token 303 加 `location: ./` 与 Set-Cookie、无 token 401。
 
 重连阶段的证据是「同一文档」：页面标记中断前后一致、离线期间页面自身请求返回 `rejected:TypeError: Failed to fetch`、测试自己的传输探针结果为 `failed`、恢复后文档请求 `status:200` 并且**多出一条新的、握手真的成功（101）的** `/api/remote.mux` 连接（新 `requestId`；断言不看 `/plugins/events`，也不接受「只是被创建过」的 socket——只有 `Network.webSocketHandshakeResponseReceived` 的 101 才算数）。旧连接不要求出现关闭事件：浏览器对 CDP 强制切断的 socket 不报 `webSocketClosed`，证据里 `preReconnectTeardown`/`preReconnectClosed` 为空正是这个原因，所以「不再复用」是靠**新连接的身份与握手**断言的，而不是靠旧连接的死讯；恢复后还会在**同一份恢复后的文档**上把开关写一次再写回来（`enabled: true` → `enabled: false`，页面读数 `true` → `false`），证明它不只是「能连通」而是**真能写入 Host**（设置写入走 HTTP `/api`，因此它被绑定的是**这份恢复后的文档与恢复点之后**，而不是某一条 WebSocket）；这三件事各由一条独立断言证明：一是被测试自己切断的旧连接在恢复之后**不得再出现任何帧流量**（`roundTripTraffic.oldUsedAfterRecovery` 必须为空，帧计数按**恢复点之后的增量**算，不用自创建以来的累计值）；二是写请求本身必须被**解析出来**——`POST` 且路径恰好 `/api/settings/mutate`、信封里 `method: "settings/mutate"`、`ns: "ui-settings"`、`ops` 中 `enabled` 的取值序列恰好是 `true|false`（`roundTripTraffic.settingsWritesAfterRecovery`，含 `rpcId` 与 `expectedRevision`）。设置写入走的是 HTTP `/api`，**不是** mux WebSocket 里的帧，所以「有帧」只被当作传输存活证据，绝不被当作写入证据；本轮实测两条 mutate RPC 齐备，新连接在恢复点之后另有 2 个帧，旧连接的最后一帧停在恢复点之前。控制台方面，`afterReconnect` 的 3 条事件全是测试自己强制断网诱发的 `ERR_INTERNET_DISCONNECTED`（文档 `Fetch` 失败、传输探针失败及其网络日志回声），作为**必需证据**单独断言（`inducedOffline_afterReconnect`），不是被静默容忍；真正被结构性容忍的只有测试自己重启实例造成的传输拆除——`afterLoopbackAccess` 与 `afterRollback` 各 7 条，其余阶段（初次加载、刷新后、重启后、结束时）事件数都是 0。
+
+### 全范围设置面（Issue #7）
+
+两条跑的最后还新增了一个阶段：把**设置面板渲染出来的每一行**（含早先阶段已经驱动过的那三行——矩阵里因此没有「同上」这类格子）、**部署自带的每一个插件配置页里每一个可编辑字段**（Web search 的凭据来源与端点字段例外：只做清单、不做驱动，理由写在矩阵里）、**Agent presets 的新会话默认**，以及**实例 `settings/describe` 报出来的每一个设置命名空间**，各自或者记成「本轮经页面真实写入过」（逐笔核对命名空间、路径、值，以及页面写入时用的那个 revision；再从实例侧读回，重启后再读一次），或者记成「显式缺口」并给出理由。
+
+它同时断言「没有第三种状态」：本轮算出的「未写」集合与 [tools/lib/settings-surface.mjs](tools/lib/settings-surface.mjs) 里登记的缺口表**完全一致**（多出一个命名空间就失败）；面板的**每一行都按行块计数恰好渲染一块**（相同文案重复渲染会被计数抓到），面板也**不得渲染登记表不认识的行**（其余只允许是它自己的导航、关闭按钮、行内控件，以及它自己那句「设置在此不可用」的提示）——所以以后某个构建新增了一个设置行，会在这里当场失败，而不是让报告停在旧清单上；插件管理页列出的部署自带页也与登记表一致；那两行「不是实例设置」的行必须**真的被点过**（交互确实生效）才允许记成「不写实例」——否则一个找不到控件的点击会伪装成「它不写」。
+
+写入按**来源**归属（请求的 authority）：overlay 模式断言远程来源的每一笔写入真的到达实例；control 模式断言**同一批点击**在非 loopback 来源上一笔都不发、实例逐命名空间原地不动，而在 loopback 来源上两种模式**逐项相同**——后者是报告生成器做的一条非回归比较：替换件不该改变 loopback 来源的行为。所有「会写」的行与四个插件配置页里的**每一个可编辑字段**在**两个来源上各驱动一遍**（两种模式都如此），所以报告里每一格都有属于它自己那一次点击的记录。设置面板里有两行（`When to Collapse Work Details`、`Keyboard shortcuts`）点击后不发出任何设置写，值只活在页面里：这一条同样是**测出来的**，两个来源各测一次，而不是被当成「已持久化」。原组合的远程页面读不到 Host 的设置，所以 control 组的某些行在**那里根本不渲染**——这一点也是测出来的，报告按行如实打印。
+
+报告生成：`node tools/settings-report.mjs` 就地打印，`--write` 替换 [docs/compatibility-report.md](docs/compatibility-report.md) 里的标记块（标记块以外的正文不动）。生成器是 fail-closed 的：证据缺失、某次跑有 FAIL 或 harness 异常、任一格与登记表不符、写入没有真的落到实例（值不符、或 revision 没动）、或两个模式的 loopback 行为不一致时，它打印问题并以退出码 1 结束，不会渲染一份「跑得比证据更多」的报告。矩阵的单位是**命名空间 + 面板上的行 + 插件配置页的字段**：General 页逐行、4 个插件配置页逐字段驱动，但**设置面板的 Models 页（provider 编辑器）与 Built-in plugins 页的行不在这个矩阵里**——它们由前面的 provider / 凭据 / 插件阶段在非 loopback 来源上驱动核对（见兼容性报告 §2），没有逐来源的格子。
 
 ## 已知行为差异与后果
 
