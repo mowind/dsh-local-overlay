@@ -2672,8 +2672,341 @@ async function main() {
     assertNoStageErrors("afterPluginPage", true);
   }
 
-  /* The plugin stage above resets its own accounting before it finishes, so nothing disruptive is left between
-     the last stage and this point: the final stage tolerates nothing. */
+  /* -------------------------------------------------------------------------------------------------------
+     INSTANCE PREFERENCES (issue #6). The General section of the standard page carries two rows that save
+     INSTANTLY: the appearance row (three aria-pressed cubes) and the language row (a menu button). Neither of
+     them has a Save button or a draft, so one click is one settings write through whichever settings provider
+     the page booted with - and with the replacement in place that provider is the instance. That makes these
+     two rows the place where "an interface preference is stored on the instance, not in this browser" becomes
+     observable: the page that clicked, a SECOND access end, a document rebuilt from scratch, and a restarted
+     instance all read the same stored value, and the value is in the profile's own patch file.
+
+     The explicit-save half of the same contract is the plugin stage above (its forms stage a draft and write on
+     Save); this stage is the instant half, and it is deliberately not turned into a uniform save flow.
+
+     The module layer refuses to replace or remove a bootstrap entry in place ("replacing bootstrap module <id>
+     requires a page reload"), so a document rebuilt from scratch - exactly one settings provider module in
+     __DSH_BOOT__ and exactly one ui-settings row across the loaded bundles - IS the release-and-replace evidence
+     for the component. The queue and the in-flight write at the moment of release are checked on the rapid
+     clicks below, against the contract the replaced provider implements: writes are serialized behind one
+     another, a disposed form issues no further write, and an interrupted write never becomes the stored value.
+     ------------------------------------------------------------------------------------------------------- */
+  const PREFS_PANEL = "(Array.from(document.querySelectorAll('[role=dialog]')).some(function (d) { return d.getClientRects().length > 0 && /Appearance|外观/.test(d.innerText || ''); }))";
+  /* The page-side helpers below are written without backslash escapes on purpose: they are string literals in
+     this file AND source text for the browser, so every pattern here is spelled with character classes of
+     literal characters only. */
+  const PREFS_HELPERS = [
+    "var visible = function (e) { return !!e && e.getClientRects().length > 0; };",
+    "var list = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };",
+    "var flatten = function (v) { return v.split(String.fromCharCode(10)).join(' ').split(String.fromCharCode(13)).join(' ').split(String.fromCharCode(9)).join(' '); };",
+    "var text = function (e) { return flatten(String((e && e.innerText) || '')).replace(/ +/g, ' ').trim(); };",
+    "var panel = list('[role=dialog]').filter(visible).pop() || document.body;",
+    "var cubes = function () { return list('button', panel).filter(visible).filter(function (b) { return b.hasAttribute('aria-pressed'); }); };",
+    "var languageRow = function () { return list('button', panel).filter(visible).filter(function (b) { return b.getAttribute('aria-haspopup') === 'menu'; }).filter(function (b) { return /language|语言/i.test(text(b.parentElement.parentElement)); })[0]; };",
+    "var instantRows = function () { return cubes().concat(languageRow() ? [languageRow()] : []).map(function (b) { return b.parentElement.parentElement; }); };",
+    "var saveButtons = function () { return instantRows().map(function (r) { return list('button', r).filter(visible).filter(function (b) { return /^(save|save changes|保存|保存更改)$/i.test(text(b)); }); }).reduce(function (a, b) { return a.concat(b); }, []); };"
+  ].join(" ");
+  const PREFS_INVENTORY = "(() => { " + PREFS_HELPERS + " var pressed = cubes().filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }); return JSON.stringify({ cubes: cubes().map(function (b) { return text(b).slice(0, 24); }), pressed: pressed.length === 1 ? text(pressed[0]).slice(0, 24) : null, language: languageRow() ? text(languageRow()).slice(0, 24) : null, saveButtons: saveButtons().map(function (b) { return text(b).slice(0, 24); }), scheme: String(getComputedStyle(document.documentElement).colorScheme || ''), background: getComputedStyle(document.body).backgroundColor }); })()";
+  const prefsClickCube = (pattern) => "(() => { " + PREFS_HELPERS + " var cube = cubes().filter(function (b) { return " + pattern + ".test(text(b)); })[0]; if (!cube) return 'MISS ' + cubes().map(function (b) { return text(b); }).join('/'); cube.click(); return 'CLICKED ' + text(cube).slice(0, 24); })()";
+  const PREFS_CLICK_DARK = prefsClickCube("/dark|深色/i");
+  const PREFS_CLICK_LIGHT = prefsClickCube("/light|浅色/i");
+  const PREFS_OPEN_LANGUAGE = "(() => { " + PREFS_HELPERS + " var row = languageRow(); if (!row) return 'MISS'; row.click(); return 'OPENED ' + text(row).slice(0, 24); })()";
+  const PREFS_MENU = "(() => { " + PREFS_HELPERS + " return JSON.stringify(list('[role=menuitem],[role=option]').filter(visible).map(function (e) { return { label: text(e).slice(0, 24), selected: String(e.className).indexOf('_selected_') !== -1 }; })); })()";
+  const prefsPickLanguage = (label) => "(() => { " + PREFS_HELPERS + " var items = list('[role=menuitem],[role=option]').filter(visible); var item = items.filter(function (e) { return text(e) === " + JSON.stringify(label) + "; })[0]; if (!item) return 'MISS ' + items.map(function (e) { return text(e); }).join('/'); item.click(); return 'CLICKED ' + text(item); })()";
+
+  const preferencesUrl = "http://" + TEST_HOST + ":" + new URL(instance.url).port + "/" + new URL(instance.url).search;
+  evidence.urls.remoteWithInstancePreferences = preferencesUrl;
+  /* Re-derived after the restart below: a fresh instance listens on a fresh port. */
+  let preferencesRpc = rpcFor(instance.url);
+  const prefsMarkOf = (client) => (client.requests.length === 0 ? 0 : client.requests[client.requests.length - 1].seq);
+  /* Every RPC a client sent since a mark, parsed from its own request bodies - the same shape the plugin stage
+     reads off the page, here also for the SECOND access end, which has a browser of its own. */
+  const prefsCallsSince = (client, sinceSeq) => client.requests
+    .filter((request) => request.seq > sinceSeq && request.method === "POST")
+    .map((request) => { let body = null; try { body = JSON.parse(request.postData); } catch (error) { body = null; } return body === null || body.method === undefined ? null : { seq: request.seq, method: body.method, args: body.payload ? body.payload.args : undefined }; })
+    .filter((call) => call !== null);
+  const prefsWritesSince = (client, sinceSeq, ns) => prefsCallsSince(client, sinceSeq).filter((call) => call.method === "settings/mutate" && call.args !== undefined && (ns === undefined || call.args.ns === ns));
+  /* The two namespaces this stage owns: a fresh document may write namespaces of its own in the same window
+     (the onboarding notice, for one), and those belong to no stage. */
+  const prefsInterfaceWrites = (client, sinceSeq) => prefsWritesSince(client, sinceSeq, undefined).filter((call) => call.args.ns === "ui-theme" || call.args.ns === "locale");
+  const preferencesOf = async () => {
+    const described = await preferencesRpc("settings/describe", {});
+    if (described.ok !== true) throw new Error("the instance refused settings/describe: " + JSON.stringify(described).slice(0, 300));
+    const pick = (ns) => {
+      const entry = described.value.namespaces.filter((item) => item.ns === ns)[0];
+      return entry === undefined ? null : { ns: entry.ns, revision: entry.revision, value: entry.value, user: entry.user };
+    };
+    return { appearance: pick("ui-theme"), language: pick("locale"), writable: described.value.writable === true };
+  };
+  /* The panel is recognised by the appearance row it holds, so this opener works on the English page and on the
+     Chinese page the language row switches the whole interface to - the stock opener's panel probe only knows
+     the English copy. */
+  const PREFS_TRIGGER_READY = "(Array.from(document.querySelectorAll(\"button\")).some((e) => /^(settings|设置)/i.test((e.getAttribute(\"aria-label\") || e.innerText || \"\").trim())))";
+  /* Only evaluated when an attempt fails: it reports what the document actually offered, so a failure here is
+     debuggable from the run log instead of by guesswork. */
+  const PREFS_DIAG = "(() => { const txt = (e) => ((e && e.innerText) || \"\").replace(/ +/g, \" \").trim().slice(0, 100); const root = document.getElementById(\"root\"); return JSON.stringify({ dialogs: Array.from(document.querySelectorAll(\"[role=dialog]\")).map((d) => ({ shown: d.offsetParent !== null, text: txt(d) })), buttons: Array.from(document.querySelectorAll(\"button\")).map(txt).filter((s) => s.length > 0).slice(0, 24), rootInert: !!(root && root.inert), body: txt(document.body) }); })()";
+  /* The stock opener presses the page's own settings entry once and trusts the first shell render. This one
+     waits for that entry to be there and retries the press, because a document whose app is still mounting can
+     accept the click without opening anything (and the stage drives the page right after a navigation). */
+  const openPreferences = async (client, shot) => {
+    const attempts = 4;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      await waitFor(client, PREFS_TRIGGER_READY, "the page's own settings entry", 60000);
+      if ((await client.eval(PREFS_PANEL)) === true) break;
+      const dialogsBefore = await client.eval("document.querySelectorAll('[role=dialog]').length");
+      await client.eval(SETTINGS_TRIGGER);
+      try {
+        await waitFor(client, "document.querySelectorAll('[role=dialog]').length > " + String(dialogsBefore) + " || " + PREFS_PANEL, "the settings panel behind the page's own settings entry", 15000);
+        break;
+      } catch (error) {
+        console.log("PREFS OPEN ATTEMPT " + String(attempt) + " FAILED: " + error.message + " :: " + (await client.eval(PREFS_DIAG)));
+        if (attempt === attempts) throw error;
+        await sleep(2500);
+      }
+    }
+    await client.eval(SETTINGS_GENERAL);
+    await sleep(1500);
+    if (shot !== undefined) await client.screenshot(shot);
+  };
+  /* The composition layers the profile loads RIGHT NOW: after an enable the own composition has replaced the
+     upstream roster, so the row count has to be taken over the current list, not over the seeded one. */
+  const prefsBundles = (await readJson(join(profileDir, "package.json"))).dsh.profile.bundles;
+  const prefsExpectedProvider = MODE === "overlay" ? FORK_PACKAGE : "@deepseek-ai/dsh-client-ui-settings";
+  const preferencesEvidence = {};
+
+  /* A. The page this run already drives reaches its own General section and reads what the instance stores. */
+  await navigate(preferencesUrl);
+  await openPreferences(cdp, undefined);
+  const prefsStart = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsStoredStart = await preferencesOf();
+  const prefsPatchStart = await readPatch();
+  preferencesEvidence.start = { page: prefsStart, stored: prefsStoredStart, themeRow: patchRow(prefsPatchStart, "ui-theme"), localeRow: patchRow(prefsPatchStart, "locale") };
+  check("the page the instance serves carries its own appearance and language rows, and neither of them has a save button",
+    prefsStart.cubes.length === 3 && prefsStart.pressed === "System" && prefsStart.scheme.indexOf("light") !== -1 && prefsStart.language === "English" && prefsStart.saveButtons.length === 0 &&
+    prefsStoredStart.appearance !== null && prefsStoredStart.appearance.value.preference === "system" && JSON.stringify(prefsStoredStart.appearance.user) === "{}" && prefsStoredStart.appearance.revision === 0 &&
+    prefsStoredStart.language !== null && prefsStoredStart.language.revision === 0 && JSON.stringify(prefsStoredStart.language.value) === "{}" &&
+    patchRow(prefsPatchStart, "ui-theme") === "" && patchRow(prefsPatchStart, "locale") === "",
+    JSON.stringify({ page: prefsStart, appearance: prefsStoredStart.appearance, language: prefsStoredStart.language }));
+
+  /* B. The instant click on the appearance row. */
+  const prefsMarkClick = prefsMarkOf(cdp);
+  const prefsClickDark = await cdp.eval(PREFS_CLICK_DARK);
+  await sleep(2500);
+  const prefsAfterClick = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsWritesClick = prefsWritesSince(cdp, prefsMarkClick, "ui-theme");
+  const prefsStoredAfterClick = await preferencesOf();
+  const prefsPatchAfterClick = await readPatch();
+  const prefsThemeRowAfterClick = patchRow(prefsPatchAfterClick, "ui-theme");
+  preferencesEvidence.instantAppearance = { click: prefsClickDark, page: prefsAfterClick, writes: prefsWritesClick, stored: prefsStoredAfterClick.appearance, themeRow: prefsThemeRowAfterClick };
+  if (MODE === "overlay") {
+    check("the appearance cube is an instant save: one click is one standard settings write to the instance, with no save step in between",
+      prefsClickDark === "CLICKED Dark" && prefsWritesClick.length === 1 && prefsWritesClick[0].args.ns === "ui-theme" && prefsWritesClick[0].args.ops.length === 1 && prefsWritesClick[0].args.ops[0].op === "set" && prefsWritesClick[0].args.ops[0].path.join(".") === "preference" && prefsWritesClick[0].args.ops[0].value === "dark" && prefsWritesClick[0].args.expectedRevision === prefsStoredStart.appearance.revision,
+      JSON.stringify(prefsWritesClick));
+    check("the clicked preference is the instance's: it is the stored value, the profile's own patch row for the appearance package, and the page's own rendering",
+      prefsAfterClick.pressed === "Dark" && prefsAfterClick.scheme.indexOf("dark") !== -1 && prefsAfterClick.background !== prefsStart.background &&
+      prefsStoredAfterClick.appearance.value.preference === "dark" && prefsStoredAfterClick.appearance.user.preference === "dark" && prefsStoredAfterClick.appearance.revision === prefsStoredStart.appearance.revision + 1 &&
+      prefsThemeRowAfterClick.indexOf("- id: ui-theme") !== -1 && prefsThemeRowAfterClick.indexOf("@deepseek-ai/dsh-client-ui-theme") !== -1 && prefsThemeRowAfterClick.indexOf("preference: dark") !== -1,
+      JSON.stringify({ page: prefsAfterClick, stored: prefsStoredAfterClick.appearance, themeRow: prefsThemeRowAfterClick }));
+  } else {
+    check("CONTROL: the same appearance click stays in the page - the page changes, no settings write leaves it, and the instance keeps its own value",
+      prefsClickDark === "CLICKED Dark" && prefsAfterClick.pressed === "Dark" && prefsAfterClick.background !== prefsStart.background &&
+      prefsInterfaceWrites(cdp, prefsMarkClick).length === 0 && prefsStoredAfterClick.appearance.value.preference === "system" && prefsStoredAfterClick.appearance.revision === prefsStoredStart.appearance.revision && prefsThemeRowAfterClick === "",
+      JSON.stringify({ page: prefsAfterClick, writes: prefsInterfaceWrites(cdp, prefsMarkClick), stored: prefsStoredAfterClick.appearance }));
+  }
+
+  /* C. A SECOND access end: a browser of its own, its own profile directory, the same instance. It has to read
+     the instance's value, and merely reading it must not write anything. */
+  const secondClient = await startChromium(join(root, "chromium-b"));
+  const cdpSecond = secondClient.cdp;
+  const prefsMarkSecond = prefsMarkOf(cdpSecond);
+  await cdpSecond.send("Page.navigate", { url: preferencesUrl }).catch(() => {});
+  await openPreferences(cdpSecond, join(EVIDENCE_DIR, MODE + "-17-preferences-second-client.png"));
+  const prefsSecond = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
+  const prefsStoredSecond = await preferencesOf();
+  const prefsWritesSecond = prefsInterfaceWrites(cdpSecond, prefsMarkSecond);
+  preferencesEvidence.secondEnd = { page: prefsSecond, stored: prefsStoredSecond, writes: prefsWritesSecond };
+  if (MODE === "overlay") {
+    check("a second access end reads the preference out of the instance instead of out of its own memory, and writes nothing while doing it",
+      prefsSecond.pressed === "Dark" && prefsSecond.scheme.indexOf("dark") !== -1 && prefsSecond.language === "English" && prefsWritesSecond.length === 0 && prefsStoredSecond.appearance.value.preference === "dark" && prefsStoredSecond.appearance.revision === prefsStoredAfterClick.appearance.revision,
+      JSON.stringify({ page: prefsSecond, stored: prefsStoredSecond.appearance, writes: prefsWritesSecond }));
+  } else {
+    check("CONTROL: a second access end sees the untouched instance value while the first one only changed its own page",
+      prefsSecond.pressed === "System" && prefsSecond.language === "English" && prefsWritesSecond.length === 0 && prefsStoredSecond.appearance.value.preference === "system" && prefsStoredSecond.appearance.revision === 0,
+      JSON.stringify({ page: prefsSecond, stored: prefsStoredSecond.appearance, writes: prefsWritesSecond }));
+  }
+
+  /* D. The release half of the module contract, on the page that clicked: the document is rebuilt from scratch,
+     and the fresh document must mount exactly one settings provider and read the stored value back. */
+  const prefsMarkReload = prefsMarkOf(cdp);
+  await reload();
+  await sleep(2500);
+  await openPreferences(cdp, undefined);
+  const prefsAfterReload = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsModulesAfterReload = JSON.parse(await cdp.eval(MODULE_PROBE));
+  const prefsProvidersAfterReload = loadedProviders(prefsModulesAfterReload);
+  const prefsRowsAfterReload = await loadedSettingsRows(profileDir, prefsBundles);
+  const prefsWritesAfterReload = prefsInterfaceWrites(cdp, prefsMarkReload);
+  const prefsStoredAfterReload = await preferencesOf();
+  preferencesEvidence.reload = { page: prefsAfterReload, providers: prefsProvidersAfterReload, rows: prefsRowsAfterReload, writes: prefsWritesAfterReload, stored: prefsStoredAfterReload };
+  check("the reloaded document loads exactly one settings provider module and the loaded bundles hold exactly one ui-settings row, so the release left no duplicate behind",
+    prefsProvidersAfterReload.length === 1 && prefsProvidersAfterReload[0] === prefsExpectedProvider && prefsRowsAfterReload.length === 1 && prefsRowsAfterReload[0].provider === prefsExpectedProvider,
+    JSON.stringify({ providers: prefsProvidersAfterReload, rows: prefsRowsAfterReload }));
+  if (MODE === "overlay") {
+    check("a document rebuilt from scratch reads the instance's stored preference back, and the page writes nothing for it while doing so",
+      prefsAfterReload.pressed === "Dark" && prefsAfterReload.scheme.indexOf("dark") !== -1 && prefsWritesAfterReload.length === 0 && prefsStoredAfterReload.appearance.value.preference === "dark" && prefsStoredAfterReload.appearance.revision === prefsStoredAfterClick.appearance.revision,
+      JSON.stringify({ page: prefsAfterReload, writes: prefsWritesAfterReload, stored: prefsStoredAfterReload.appearance }));
+  } else {
+    check("CONTROL: the rebuilt document shows the instance's value again, so the browser-local change went away with the document",
+      prefsAfterReload.pressed === "System" && prefsWritesAfterReload.length === 0 && prefsStoredAfterReload.appearance.revision === 0,
+      JSON.stringify({ page: prefsAfterReload, writes: prefsWritesAfterReload }));
+  }
+
+  /* E. Queued and in-flight writes, on the same instant row. Two clicks 120 ms apart are two writes, serialized
+     behind each other and carrying the revision the previous one produced; a click that is still on the wire
+     when the document is released writes at most once and never replays into a second value. */
+  const prefsMarkQueue = prefsMarkOf(cdp);
+  const prefsQueueFirst = await cdp.eval(PREFS_CLICK_LIGHT);
+  await sleep(120);
+  const prefsQueueSecond = await cdp.eval(PREFS_CLICK_DARK);
+  await sleep(3000);
+  const prefsWritesQueue = prefsWritesSince(cdp, prefsMarkQueue, "ui-theme");
+  const prefsStoredQueue = await preferencesOf();
+  const prefsPatchQueue = await readPatch();
+  preferencesEvidence.queue = { first: prefsQueueFirst, second: prefsQueueSecond, writes: prefsWritesQueue, stored: prefsStoredQueue.appearance, themeRow: patchRow(prefsPatchQueue, "ui-theme") };
+  if (MODE === "overlay") {
+    check("two rapid clicks are two serialized writes, and the second one carries the revision the first produced",
+      prefsQueueFirst === "CLICKED Light" && prefsQueueSecond === "CLICKED Dark" && prefsWritesQueue.length === 2 &&
+      prefsWritesQueue[0].args.ops[0].value === "light" && prefsWritesQueue[1].args.ops[0].value === "dark" &&
+      prefsWritesQueue[0].args.expectedRevision === prefsStoredAfterReload.appearance.revision && prefsWritesQueue[1].args.expectedRevision === prefsStoredAfterReload.appearance.revision + 1 &&
+      prefsStoredQueue.appearance.value.preference === "dark" && prefsStoredQueue.appearance.revision === prefsStoredAfterReload.appearance.revision + 2 && patchRow(prefsPatchQueue, "ui-theme").indexOf("preference: dark") !== -1,
+      JSON.stringify({ writes: prefsWritesQueue, stored: prefsStoredQueue.appearance, themeRow: patchRow(prefsPatchQueue, "ui-theme") }));
+    /* The in-flight write at the moment the document goes away: either it reached the instance or it did not,
+       but it may not become a second value later, and the fresh document has to agree with what is stored. */
+    const prefsMarkInFlight = prefsMarkOf(cdp);
+    const prefsStoredBeforeInFlight = await preferencesOf();
+    const prefsClickInFlight = await cdp.eval(PREFS_CLICK_LIGHT);
+    await reload();
+    await sleep(4000);
+    await openPreferences(cdp, undefined);
+    const prefsAfterInFlight = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+    const prefsWritesInFlight = prefsWritesSince(cdp, prefsMarkInFlight, "ui-theme");
+    const prefsStoredAfterInFlight = await preferencesOf();
+    await sleep(2500);
+    const prefsStoredSettled = await preferencesOf();
+    const inFlightStored = prefsStoredAfterInFlight.appearance.value.preference;
+    preferencesEvidence.inFlightRelease = { click: prefsClickInFlight, writes: prefsWritesInFlight, storedBefore: prefsStoredBeforeInFlight.appearance, storedAfter: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight, themeRow: patchRow(await readPatch(), "ui-theme") };
+    check("a click still on the wire when the document is released writes at most once, leaves either the old value or the clicked one, and never replays afterwards",
+      prefsClickInFlight === "CLICKED Light" && prefsWritesInFlight.length <= 1 &&
+      (inFlightStored === prefsStoredBeforeInFlight.appearance.value.preference || inFlightStored === "light") &&
+      prefsStoredAfterInFlight.appearance.revision <= prefsStoredBeforeInFlight.appearance.revision + 1 &&
+      prefsStoredSettled.appearance.revision === prefsStoredAfterInFlight.appearance.revision && prefsStoredSettled.appearance.value.preference === inFlightStored &&
+      prefsAfterInFlight.pressed === (inFlightStored === "light" ? "Light" : "Dark"),
+      JSON.stringify({ click: prefsClickInFlight, writes: prefsWritesInFlight, before: prefsStoredBeforeInFlight.appearance, after: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight }));
+  } else {
+    check("CONTROL: two rapid clicks on the instant row are two page-local changes and no settings write at all",
+      prefsQueueFirst === "CLICKED Light" && prefsQueueSecond === "CLICKED Dark" && prefsWritesQueue.length === 0 && prefsStoredQueue.appearance.value.preference === "system" && prefsStoredQueue.appearance.revision === 0 && patchRow(prefsPatchQueue, "ui-theme") === "",
+      JSON.stringify({ writes: prefsWritesQueue, stored: prefsStoredQueue.appearance, themeRow: patchRow(prefsPatchQueue, "ui-theme") }));
+  }
+
+  /* F. The language row: the same instant contract, on the other preference the standard page owns. */
+  const prefsStoredBeforeLanguage = await preferencesOf();
+  const prefsMarkLanguage = prefsMarkOf(cdp);
+  const prefsOpenLanguage = await cdp.eval(PREFS_OPEN_LANGUAGE);
+  await sleep(900);
+  const prefsLanguageMenu = JSON.parse(await cdp.eval(PREFS_MENU));
+  const prefsLanguagePicked = await cdp.eval(prefsPickLanguage("中文"));
+  await sleep(2500);
+  const prefsAfterLanguage = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsWritesLanguage = prefsWritesSince(cdp, prefsMarkLanguage, "locale");
+  const prefsWritesLanguageAny = prefsInterfaceWrites(cdp, prefsMarkLanguage);
+  const prefsStoredAfterLanguage = await preferencesOf();
+  const prefsLocaleRowAfterLanguage = patchRow(await readPatch(), "locale");
+  await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-18-preferences-language.png"));
+  preferencesEvidence.instantLanguage = { opened: prefsOpenLanguage, menu: prefsLanguageMenu, picked: prefsLanguagePicked, page: prefsAfterLanguage, writes: prefsWritesLanguage, stored: prefsStoredAfterLanguage.language, localeRow: prefsLocaleRowAfterLanguage };
+  if (MODE === "overlay") {
+    check("the language row's menu offers the instance's language list, and picking one is one instant settings write",
+      prefsOpenLanguage === "OPENED English" && prefsLanguageMenu.some((item) => item.label === "中文") && prefsLanguageMenu.filter((item) => item.selected).map((item) => item.label).join("/") === "English" &&
+      prefsLanguagePicked === "CLICKED 中文" && prefsWritesLanguage.length === 1 && prefsWritesLanguage[0].args.ns === "locale" && prefsWritesLanguage[0].args.ops[0].value === "zh" && prefsWritesLanguage[0].args.expectedRevision === prefsStoredBeforeLanguage.language.revision,
+      JSON.stringify({ opened: prefsOpenLanguage, menu: prefsLanguageMenu, writes: prefsWritesLanguage }));
+    check("the chosen language belongs to the instance: the page switches to it, the instance stores it, and the profile's patch file keeps it",
+      prefsAfterLanguage.cubes.length === 3 && prefsAfterLanguage.cubes.some((cube) => cube.indexOf("浅色") !== -1) && prefsAfterLanguage.language === "中文" && prefsAfterLanguage.saveButtons.length === 0 &&
+      prefsStoredAfterLanguage.language.value.preference === "zh" && prefsStoredAfterLanguage.language.user.preference === "zh" && prefsStoredAfterLanguage.language.revision === prefsStoredBeforeLanguage.language.revision + 1 &&
+      prefsStoredAfterLanguage.appearance.revision === prefsStoredBeforeLanguage.appearance.revision &&
+      prefsLocaleRowAfterLanguage.indexOf("- id: locale") !== -1 && prefsLocaleRowAfterLanguage.indexOf("@deepseek-ai/dsh-client-locale") !== -1 && prefsLocaleRowAfterLanguage.indexOf("preference: zh") !== -1,
+      JSON.stringify({ page: prefsAfterLanguage, stored: prefsStoredAfterLanguage, localeRow: prefsLocaleRowAfterLanguage }));
+  } else {
+    check("CONTROL: the same language choice changes only the page's own rendering, and the instance keeps its own state",
+      prefsLanguagePicked === "CLICKED 中文" && prefsAfterLanguage.cubes.some((cube) => cube.indexOf("浅色") !== -1) && prefsAfterLanguage.language === "中文" && prefsWritesLanguageAny.length === 0 && prefsStoredAfterLanguage.language.revision === prefsStoredBeforeLanguage.language.revision && prefsStoredAfterLanguage.appearance.revision === prefsStoredBeforeLanguage.appearance.revision && prefsLocaleRowAfterLanguage === "",
+      JSON.stringify({ picked: prefsLanguagePicked, page: prefsAfterLanguage, writes: prefsWritesLanguageAny, stored: prefsStoredAfterLanguage.language }));
+  }
+
+  /* G. A fresh process: the bundle list and every stored value are read from disk again, and a document opened
+     on the new instance has to read the same preferences back. */
+  const prefsStoredBeforeRestart = await preferencesOf();
+  discontinue("instance restart after the instance preferences");
+  instance.child.kill("SIGTERM");
+  await sleep(3000);
+  instance = await startInstance(home, PROFILE);
+  preferencesRpc = rpcFor(instance.url);
+  const afterPreferencesRestart = new URL(instance.url);
+  const preferencesUrlAfterRestart = "http://" + TEST_HOST + ":" + afterPreferencesRestart.port + "/" + afterPreferencesRestart.search;
+  evidence.urls.remoteWithInstancePreferencesAfterRestart = preferencesUrlAfterRestart;
+  const prefsStoredAfterRestart = await preferencesOf();
+  const prefsPatchAfterRestart = await readPatch();
+  await navigate(preferencesUrlAfterRestart);
+  await openPreferences(cdp, join(EVIDENCE_DIR, MODE + "-19-preferences-after-restart.png"));
+  const prefsPageAfterRestart = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  const prefsStoredAfterRestartPage = await preferencesOf();
+  /* A restarted instance keeps the stored values but counts revisions from zero again, so this stage compares
+     the values (and the profile's patch rows), never the revision numbers across the restart. */
+  preferencesEvidence.restart = { before: prefsStoredBeforeRestart, page: prefsPageAfterRestart, stored: prefsStoredAfterRestart, pageRead: prefsStoredAfterRestartPage, themeRow: patchRow(prefsPatchAfterRestart, "ui-theme"), localeRow: patchRow(prefsPatchAfterRestart, "locale") };
+  if (MODE === "overlay") {
+    check("the instance still holds both preferences its last document saved after a restart - the stored values and the profile's patch rows carry over, while the revision counters start over with the new instance",
+      prefsStoredAfterRestart.appearance.value.preference === prefsStoredBeforeRestart.appearance.value.preference && JSON.stringify(prefsStoredAfterRestart.appearance.user) === JSON.stringify(prefsStoredBeforeRestart.appearance.user) &&
+      prefsStoredAfterRestart.language.value.preference === "zh" && JSON.stringify(prefsStoredAfterRestart.language.user) === JSON.stringify(prefsStoredBeforeRestart.language.user) &&
+      prefsStoredAfterRestart.appearance.revision === 0 && prefsStoredAfterRestart.language.revision === 0 &&
+      patchRow(prefsPatchAfterRestart, "ui-theme").indexOf("preference: " + prefsStoredAfterRestart.appearance.value.preference) !== -1 && patchRow(prefsPatchAfterRestart, "locale").indexOf("preference: zh") !== -1,
+      JSON.stringify({ stored: prefsStoredAfterRestart, themeRow: patchRow(prefsPatchAfterRestart, "ui-theme"), localeRow: patchRow(prefsPatchAfterRestart, "locale") }));
+    check("a document opened after the restart reads both preferences back out of the instance",
+      prefsPageAfterRestart.cubes.length === 3 && prefsPageAfterRestart.saveButtons.length === 0 && prefsPageAfterRestart.language === "中文" && prefsPageAfterRestart.pressed === (prefsStoredAfterRestart.appearance.value.preference === "dark" ? "深色" : "浅色") && prefsStoredAfterRestartPage.appearance.revision === prefsStoredAfterRestart.appearance.revision,
+      JSON.stringify({ page: prefsPageAfterRestart, stored: prefsStoredAfterRestart.appearance }));
+  } else {
+    check("CONTROL: the restarted instance still holds no interface preference, and a fresh document starts from the defaults again",
+      prefsStoredAfterRestart.appearance.value.preference === "system" && prefsStoredAfterRestart.appearance.revision === 0 && prefsStoredAfterRestart.language.revision === prefsStoredBeforeLanguage.language.revision && prefsPatchAfterRestart.indexOf("- id: ui-theme") === -1 && prefsPatchAfterRestart.indexOf("- id: locale") === -1 && prefsPageAfterRestart.pressed === "System" && prefsPageAfterRestart.language === "English",
+      JSON.stringify({ page: prefsPageAfterRestart, stored: prefsStoredAfterRestart, patch: prefsPatchAfterRestart.slice(0, 300) }));
+  }
+  /* The second access end, read once more on the restarted instance: both ends have to agree on the same value. */
+  await cdpSecond.send("Page.navigate", { url: preferencesUrlAfterRestart }).catch(() => {});
+  await openPreferences(cdpSecond, undefined);
+  const prefsSecondAfterRestart = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
+  preferencesEvidence.secondEndAfterRestart = prefsSecondAfterRestart;
+  check(MODE === "overlay" ? "the second access end reads the restarted instance's own values back, on a document of its own" : "CONTROL: the second access end still reads the defaults from the restarted instance",
+    MODE === "overlay"
+      ? prefsSecondAfterRestart.language === "中文" && prefsSecondAfterRestart.pressed === prefsPageAfterRestart.pressed && prefsSecondAfterRestart.cubes.length === 3
+      : prefsSecondAfterRestart.language === "English" && prefsSecondAfterRestart.pressed === "System",
+    JSON.stringify(prefsSecondAfterRestart));
+  secondClient.chrome.kill("SIGKILL");
+
+  /* H. The whole stage ran through five documents, four of them rebuilt from scratch, and one instance restart:
+     the module layer must still hold exactly one settings provider. */
+  const prefsModulesAtEnd = JSON.parse(await cdp.eval(MODULE_PROBE));
+  const prefsProvidersAtEnd = loadedProviders(prefsModulesAtEnd);
+  const prefsRowsAtEnd = await loadedSettingsRows(profileDir, prefsBundles);
+  const prefsPatchAtEnd = await readPatch();
+  preferencesEvidence.moduleAtEnd = { modules: prefsModulesAtEnd, providers: prefsProvidersAtEnd, rows: prefsRowsAtEnd, uiSettingsRowsInProfilePatch: prefsPatchAtEnd.split("\n").filter((line) => line.trim() === "- id: ui-settings").length, uiSettingsRowsAnyPrefix: prefsPatchAtEnd.split("- id: ui-settings").length - 1, uiSettingsRowInProfilePatch: patchRow(prefsPatchAtEnd, "ui-settings") };
+  check(MODE === "overlay" ? "after every reload, restart and second access end the page still loads exactly one settings provider, and the profile's patch file still holds exactly one ui-settings row" : "CONTROL: after every reload, restart and second access end the page still loads exactly one settings provider, the upstream package",
+    prefsProvidersAtEnd.length === 1 && prefsProvidersAtEnd[0] === prefsExpectedProvider && prefsRowsAtEnd.length === 1 && prefsRowsAtEnd[0].provider === prefsExpectedProvider &&
+    /* The profile's own patch file carries the override row the run is built on, and it has to stay a single row:
+       `- id: ui-settings-general` and its siblings are separate rows, so the count matches row headers exactly.
+       The row also has to name the provider this mode is supposed to load - the replacement itself is what changed. */
+    preferencesEvidence.moduleAtEnd.uiSettingsRowsInProfilePatch === 1 && preferencesEvidence.moduleAtEnd.uiSettingsRowInProfilePatch.indexOf(prefsExpectedProvider) !== -1,
+    JSON.stringify(preferencesEvidence.moduleAtEnd));
+  evidence.preferences = preferencesEvidence;
+  assertLiveTransport("afterInstancePreferences");
+  assertNoStageErrors("afterInstancePreferences", true);
+
+  /* The instance-preference stage above resets its own accounting before it finishes, so nothing disruptive is
+     left between the last stage and this point: the final stage tolerates nothing. */
   assertLiveTransport("atEnd");
   assertNoStageErrors("atEnd", false);
   evidence.consoleFullTail = cdp.errors().slice(-8);
