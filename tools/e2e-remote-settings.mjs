@@ -2721,11 +2721,25 @@ async function main() {
   /* The stage's own view on the shared decoder and mark above: the second access end is a browser of its own,
      so both are read against whichever CDP connection is meant, and the namespaces this stage owns are picked
      out of the parsed calls here rather than by a decoder of its own. */
-  const prefsCallsSince = (client, sinceSeq) => pageRpcCallsSince(sinceSeq, client);
-  const prefsWritesSince = (client, sinceSeq, ns) => prefsCallsSince(client, sinceSeq).filter((call) => call.method === "settings/mutate" && call.args !== undefined && (ns === undefined || call.args.ns === ns));
+  const prefsWritesSince = (client, sinceSeq, ns) => pageRpcCallsSince(sinceSeq, client).filter((call) => call.method === "settings/mutate" && call.args !== undefined && (ns === undefined || call.args.ns === ns));
   /* The two namespaces this stage owns: a fresh document may write namespaces of its own in the same window
      (the onboarding notice, for one), and those belong to no stage. */
   const prefsInterfaceWrites = (client, sinceSeq) => prefsWritesSince(client, sinceSeq, undefined).filter((call) => call.args.ns === "ui-theme" || call.args.ns === "locale");
+  const prefsClickFor = (value) => (value === "dark" ? PREFS_CLICK_DARK : (value === "light" ? PREFS_CLICK_LIGHT : PREFS_CLICK_SYSTEM));
+  const prefsLabelFor = (value) => (value === "dark" ? "深色" : (value === "light" ? "浅色" : "跟随系统"));
+  /* Waits for the ALREADY-OPEN panel to show a particular value. It never opens, closes or reopens anything: a
+     panel that stops showing its three cubes ends the wait, and the caller's own assertion then fails on it. */
+  const prefsWaitForPanelLabel = async (label, timeoutMs) => {
+    const deadline = Date.now() + timeoutMs;
+    let last;
+    while (Date.now() < deadline) {
+      last = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+      if (last.cubes.length !== 3) return undefined;
+      if (last.pressed === label) return last;
+      await sleep(500);
+    }
+    return undefined;
+  };
   const preferencesOf = async () => {
     const described = await preferencesRpc("settings/describe", {});
     if (described.ok !== true) throw new Error("the instance refused settings/describe: " + JSON.stringify(described).slice(0, 300));
@@ -2890,7 +2904,6 @@ async function main() {
   await sleep(2500);
   const prefsStoredAfterLiveRefresh = await preferencesOf();
   const prefsWritesLiveRefresh = prefsWritesSince(cdp, prefsMarkLiveRefresh, "ui-theme");
-  const prefsSecondWritesLiveRefresh = prefsInterfaceWrites(cdpSecond, prefsSecondMarkLiveRefresh);
   const prefsSecondLiveRefresh = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
   /* The other direction as well, so the second end is shown following a change rather than agreeing by accident,
      and the value the queue phase below starts from is the dark one either way. */
@@ -2898,6 +2911,7 @@ async function main() {
   await sleep(2500);
   const prefsStoredAfterLiveRefreshBack = await preferencesOf();
   const prefsSecondLiveRefreshBack = JSON.parse(await cdpSecond.eval(PREFS_INVENTORY));
+  const prefsSecondWritesLiveRefresh = prefsInterfaceWrites(cdpSecond, prefsSecondMarkLiveRefresh);
   preferencesEvidence.liveRefresh = { click: prefsClickLiveRefresh, storedBefore: prefsStoredBeforeLiveRefresh.appearance, storedAfter: prefsStoredAfterLiveRefresh.appearance, page: prefsSecondLiveRefresh, clickBack: prefsClickLiveRefreshBack, storedAfterBack: prefsStoredAfterLiveRefreshBack.appearance, pageBack: prefsSecondLiveRefreshBack, writesFirstEnd: prefsWritesLiveRefresh, writesSecondEnd: prefsSecondWritesLiveRefresh };
   if (MODE === "overlay") {
     check("the other access end's open page follows the first end's change in both directions without being reloaded, because the value is the instance's",
@@ -2947,13 +2961,17 @@ async function main() {
       catch (error) { prefsInterceptionHeld = false; }
     }
     discontinue("in-flight release under a held-back response");
-    const prefsInFlightDocMark = String(await cdp.eval("(window.__e2eInFlightDocMark = 'inflight-' + Math.random().toString(36).slice(2), window.__e2eInFlightDocMark)"));
+    const prefsInFlightDocMark = Number(await cdp.eval("(window.__e2eInFlightDocMark = Math.random(), window.__e2eInFlightDocMark)"));
     const prefsPauseMark = cdp.eventSeq;
     const prefsClickInFlight = await cdp.eval(PREFS_CLICK_LIGHT);
     const prefsClickQueued = await cdp.eval(PREFS_CLICK_SYSTEM);
     await sleep(700);
     const prefsPausedWrites = cdp.events.filter((event) => event.seq > prefsPauseMark && event.method === "Fetch.requestPaused" && String(event.params.request.postData).indexOf("settings/mutate") !== -1);
-    const prefsPausedWriteIds = new Set(prefsPausedWrites.map((event) => event.params.requestId));
+    /* Fetch.requestPaused carries BOTH ids: requestId belongs to the interception, networkId is the request the
+       Network domain reports. Completion is a Network-domain event, so it has to be matched by networkId - matching
+       the interception id would compare two different namespaces and the check could never fire. */
+    const prefsPausedWriteIds = new Set(prefsPausedWrites.map((event) => (event.params.networkId === undefined ? event.params.requestId : event.params.networkId)));
+    const prefsPausedWriteSeenInNetwork = prefsPausedWrites.filter((event) => cdp.requests.some((request) => request.requestId === (event.params.networkId === undefined ? event.params.requestId : event.params.networkId)));
     /* Nothing may have completed for the write the harness is holding: neither a finished load nor a failure. */
     const prefsCompletedWhilePaused = cdp.events.filter((event) => event.seq > prefsPauseMark && prefsPausedWriteIds.has(event.params.requestId) && (event.method === "Network.loadingFinished" || event.method === "Network.loadingFailed"));
     await reload();
@@ -2963,8 +2981,9 @@ async function main() {
     let prefsDocumentGone = false;
     for (let attempt = 0; attempt < 40 && prefsDocumentGone === false; attempt += 1) {
       await sleep(250);
-      let mark = "<eval-failed>";
-      try { mark = String(await cdp.eval("String(window.__e2eInFlightDocMark)")); } catch (error) { mark = "<eval-failed>"; }
+      let mark = Number.NaN;
+      /* An evaluation failure during the navigation means the document that set the mark is gone too. */
+      try { mark = Number(await cdp.eval("Number(window.__e2eInFlightDocMark)")); } catch (error) { mark = Number.NaN; }
       prefsDocumentGone = mark !== prefsInFlightDocMark;
     }
     try { await cdp.send("Fetch.disable"); } catch (error) { prefsInterceptionHeld = false; }
@@ -2978,10 +2997,10 @@ async function main() {
     await sleep(2500);
     const prefsStoredSettled = await preferencesOf();
     const inFlightStored = prefsStoredAfterInFlight.appearance.value.preference;
-    preferencesEvidence.inFlightRelease = { pattern: prefsRpcPattern, interceptionHeld: prefsInterceptionHeld, pausedWrites: prefsPausedWrites.map((event) => ({ url: event.params.request.url, status: event.params.responseStatusCode })), completedWhilePaused: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued, writes: prefsWritesInFlight, storedBefore: prefsStoredBeforeInFlight.appearance, storedAfter: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight, themeRow: patchRow(await readPatch(), "ui-theme") };
+    preferencesEvidence.inFlightRelease = { pattern: prefsRpcPattern, interceptionHeld: prefsInterceptionHeld, pausedWrites: prefsPausedWrites.map((event) => ({ url: event.params.request.url, status: event.params.responseStatusCode, networkId: event.params.networkId })), seenInNetwork: prefsPausedWriteSeenInNetwork.length, completedWhilePaused: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued, writes: prefsWritesInFlight, storedBefore: prefsStoredBeforeInFlight.appearance, storedAfter: prefsStoredAfterInFlight.appearance, settled: prefsStoredSettled.appearance, page: prefsAfterInFlight, themeRow: patchRow(await readPatch(), "ui-theme") };
     check("the harness really held the write on the wire: the instance answered it, the response never reached the released document, and the click queued behind it was made in that window",
-      prefsInterceptionHeld === true && prefsPausedWrites.length === 1 && prefsPausedWrites[0].params.responseStatusCode === 200 && prefsCompletedWhilePaused.length === 0 && prefsClickInFlight === "CLICKED Light" && prefsClickQueued === "CLICKED System",
-      JSON.stringify({ pattern: prefsRpcPattern, held: prefsInterceptionHeld, paused: prefsPausedWrites.length, status: prefsPausedWrites.length > 0 ? prefsPausedWrites[0].params.responseStatusCode : null, completed: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued }));
+      prefsInterceptionHeld === true && prefsPausedWrites.length === 1 && prefsPausedWrites[0].params.responseStatusCode === 200 && prefsPausedWriteSeenInNetwork.length === 1 && prefsCompletedWhilePaused.length === 0 && prefsClickInFlight === "CLICKED Light" && prefsClickQueued === "CLICKED System",
+      JSON.stringify({ pattern: prefsRpcPattern, held: prefsInterceptionHeld, paused: prefsPausedWrites.length, status: prefsPausedWrites.length > 0 ? prefsPausedWrites[0].params.responseStatusCode : null, seenInNetwork: prefsPausedWriteSeenInNetwork.length, completed: prefsCompletedWhilePaused.length, click: prefsClickInFlight, queuedClick: prefsClickQueued }));
     check("a released document leaves exactly the one write that was on the wire and never sends the successor queued behind it: the instance holds the clicked value, nothing replays afterwards, and a fresh document reads that value",
       prefsWritesInFlight.length === 1 && prefsWritesInFlight[0].args.ops[0].value === "light" &&
       prefsStoredAfterInFlight.appearance.value.preference === "light" && prefsStoredAfterInFlight.appearance.revision === prefsStoredBeforeInFlight.appearance.revision + 1 &&
@@ -3027,8 +3046,9 @@ async function main() {
   }
 
   /* F2. The same document through a real transport interruption, with both preferences already stored: the open
-     panel keeps its rows, the instance keeps the values while the page cannot reach it, and the recovered document
-     writes the appearance row again - no reload, and that write has to reach the instance. */
+     panel keeps its rows while the page cannot reach the instance, another access end moves the value in that very
+     window - a change this page therefore misses - and the recovered document has to pick that change up in the
+     panel that was already open, without a reload and without reopening it, and then write again. */
   const prefsRestartAuthority = new URL(preferencesUrl).host;
   const prefsStoredBeforeWindow = await preferencesOf();
   const prefsPageBeforeWindow = JSON.parse(await cdp.eval(PREFS_INVENTORY));
@@ -3036,13 +3056,16 @@ async function main() {
      in the address bar, so the URL the harness expects to see fail is read off the page rather than assumed. */
   const prefsProbeUrl = String(await cdp.eval("location.origin + location.pathname + location.search"));
   /* Which value the in-flight phase above settled on is deliberately open (the released document may or may not
-     have got its write in), so the window clicks the OPPOSITE value: that click is a change either way, and the
-     assertions below are made against the value that was stored when the window opened. */
+     have got its write in), so both clicks below are derived from the value that was stored when this window
+     opened: the other end writes the opposite of it while this page is offline, and this page then writes back. */
   const prefsWindowBefore = prefsStoredBeforeWindow.appearance.value.preference;
-  const prefsWindowTarget = prefsWindowBefore === "light" ? "dark" : "light";
-  const prefsWindowClick = prefsWindowTarget === "dark" ? PREFS_CLICK_DARK : PREFS_CLICK_LIGHT;
-  const prefsDocMarkBeforeWindow = String(await cdp.eval("(window.__e2ePrefsDocMark = 'prefs-' + Math.random().toString(36).slice(2), window.__e2ePrefsDocMark)"));
-  const prefsMarkReconnect = probeRequestMark(cdp);
+  const prefsWindowMissed = prefsWindowBefore === "dark" ? "light" : "dark";
+  const prefsWindowMissedClick = prefsWindowMissed === "dark" ? PREFS_CLICK_DARK : PREFS_CLICK_LIGHT;
+  const prefsWindowBackClick = prefsClickFor(prefsWindowBefore);
+  const prefsWindowBackLabel = prefsLabelFor(prefsWindowBefore);
+  const prefsDocMarkBeforeWindow = Number(await cdp.eval("(window.__e2ePrefsDocMark = Math.random(), window.__e2ePrefsDocMark)"));
+  const prefsMarkWindow = probeRequestMark(cdp);
+  const prefsSecondMarkWindow = probeRequestMark(cdpSecond);
   let prefsOfflineApplied = true;
   discontinue("preference reconnect window");
   try { await cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
@@ -3052,43 +3075,80 @@ async function main() {
   const prefsFetchWhileOffline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
   const prefsPageWhileOffline = JSON.parse(await cdp.eval(PREFS_INVENTORY));
   const prefsStoredWhileOffline = await preferencesOf();
+  /* The page's own write count is read HERE, while it is still offline: the recovered document writes again further
+     down, and that later write is the second half of this window rather than an interruption of it. */
+  const prefsWritesWhileOffline = prefsWritesSince(cdp, prefsMarkWindow, "ui-theme");
+  /* While this page cannot reach the instance at all, the other access end moves the value: that change is real on
+     the instance, and this page cannot have seen it. */
+  const prefsMissedClick = await cdpSecond.eval(prefsWindowMissedClick);
+  await sleep(2500);
+  const prefsStoredAfterMissed = await preferencesOf();
   try { await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
   catch (error) { prefsOfflineApplied = false; }
   let prefsTransportBack = false;
   for (let attempt = 0; attempt < 60 && prefsTransportBack === false; attempt += 1) { await sleep(500); prefsTransportBack = liveMuxConnections().length > 0; }
-  const prefsDocMarkAfterWindow = String(await cdp.eval("String(window.__e2ePrefsDocMark)"));
-  await openPreferences(cdp, join(EVIDENCE_DIR, MODE + "-20-preferences-after-reconnect.png"));
-  const prefsClickAfterReconnect = await cdp.eval(prefsWindowClick);
+  const prefsDocMarkAfterWindow = Number(await cdp.eval("Number(window.__e2ePrefsDocMark)"));
+  /* The panel that was open when the transport went away has to be the panel that picks the missed change up AND
+     the panel the write comes from, so the opener is NOT used here: it normalises the document first (closing
+     dialogs), which would prove a freshly opened panel instead of the already-open consumer this window is about.
+     In overlay the wait is for the value that was missed while offline; in control there is nothing on the instance
+     to refresh from, so the wait is only for the rendering this page already had. */
+  const prefsRefreshLabel = MODE === "overlay" ? prefsLabelFor(prefsWindowMissed) : prefsPageBeforeWindow.pressed;
+  const prefsRefreshedPanel = await prefsWaitForPanelLabel(prefsRefreshLabel, MODE === "overlay" ? 20000 : 8000);
+  const prefsPanelStillOpen = (await cdp.eval(PREFS_CUBES_READY)) === true;
+  if (prefsPanelStillOpen === false) {
+    console.log("PREFERENCES PANEL WAS NOT STILL OPEN AFTER THE TRANSPORT WINDOW: " + (await cdp.eval(PREFS_DIAG)));
+    await openPreferences(cdp, undefined);
+  }
+  const prefsMarkReconnect = probeRequestMark(cdp);
+  const prefsClickAfterReconnect = await cdp.eval(prefsWindowBackClick);
   await sleep(2500);
   const prefsAfterReconnect = JSON.parse(await cdp.eval(PREFS_INVENTORY));
+  await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-20-preferences-after-reconnect.png"));
   const prefsWritesReconnect = prefsWritesSince(cdp, prefsMarkReconnect, "ui-theme");
+  const prefsSecondWritesWindow = prefsInterfaceWrites(cdpSecond, prefsSecondMarkWindow);
   const prefsStoredReconnect = await preferencesOf();
-  preferencesEvidence.transportWindow = { offlineApplied: prefsOfflineApplied, docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, transportWhileOffline: prefsTransportWhileOffline, fetchWhileOffline: prefsFetchWhileOffline, transportBack: prefsTransportBack, pageWhileOffline: prefsPageWhileOffline, storedWhileOffline: prefsStoredWhileOffline, click: prefsClickAfterReconnect, page: prefsAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect };
+  preferencesEvidence.transportWindow = { offlineApplied: prefsOfflineApplied, windowBefore: prefsWindowBefore, missedByOtherEnd: prefsWindowMissed, missedClick: prefsMissedClick, docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, panelStillOpen: prefsPanelStillOpen, refreshLabel: prefsRefreshLabel, refreshedPanel: prefsRefreshedPanel, transportWhileOffline: prefsTransportWhileOffline, fetchWhileOffline: prefsFetchWhileOffline, transportBack: prefsTransportBack, pageWhileOffline: prefsPageWhileOffline, storedWhileOffline: prefsStoredWhileOffline, storedAfterMissed: prefsStoredAfterMissed, writesWhileOffline: prefsWritesWhileOffline, secondWrites: prefsSecondWritesWindow, click: prefsClickAfterReconnect, page: prefsAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect };
   check("the harness really took the page offline, and the page's own settings transport failed at the network layer while both preferences were already stored",
     prefsOfflineApplied === true && /^(failed|closed)$/.test(String(prefsTransportWhileOffline)) && /^rejected:/.test(String(prefsFetchWhileOffline)),
     JSON.stringify({ offlineApplied: prefsOfflineApplied, transport: prefsTransportWhileOffline, fetch: prefsFetchWhileOffline }));
   if (MODE === "overlay") {
-    check("the open panel still shows the instance's stored preferences while the page cannot reach the instance at all",
+    check("the open panel keeps the instance's stored preferences while the page cannot reach the instance at all, and the page issues no write at all in that window",
       prefsPageWhileOffline.cubes.length === 3 && prefsPageWhileOffline.saveButtons.length === 0 && prefsPageWhileOffline.language === prefsPageBeforeWindow.language && prefsPageWhileOffline.pressed === prefsPageBeforeWindow.pressed &&
-      prefsStoredWhileOffline.appearance.value.preference === prefsWindowBefore && prefsStoredWhileOffline.language.value.preference === "zh",
-      JSON.stringify({ page: prefsPageWhileOffline, stored: prefsStoredWhileOffline }));
-    check("the SAME document writes the preference to the instance again once the transport is back, without a reload",
-      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && prefsTransportBack === true && /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 1 && prefsWritesReconnect[0].args.ns === "ui-theme" && prefsWritesReconnect[0].args.ops[0].value === prefsWindowTarget &&
-      prefsStoredReconnect.appearance.value.preference === prefsWindowTarget && prefsStoredReconnect.appearance.revision === prefsStoredWhileOffline.appearance.revision + 1 &&
-      prefsAfterReconnect.pressed === (prefsWindowTarget === "dark" ? "深色" : "浅色") &&
-      (prefsWindowTarget === "light" ? prefsCubeIsLight(prefsAfterReconnect) : prefsCubeIsDark(prefsAfterReconnect)),
-      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, transportBack: prefsTransportBack, windowBefore: prefsWindowBefore, target: prefsWindowTarget, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect.appearance, page: prefsAfterReconnect }));
+      prefsStoredWhileOffline.appearance.value.preference === prefsWindowBefore && prefsStoredWhileOffline.language.value.preference === "zh" && prefsWritesWhileOffline.length === 0,
+      JSON.stringify({ page: prefsPageWhileOffline, stored: prefsStoredWhileOffline, writes: prefsWritesWhileOffline }));
+    check("the other access end really moved the instance's value while this page was offline, so this page has missed a change it could not have seen",
+      /^CLICKED /.test(String(prefsMissedClick)) && prefsStoredAfterMissed.appearance.value.preference === prefsWindowMissed && prefsStoredAfterMissed.appearance.revision === prefsStoredWhileOffline.appearance.revision + 1 && prefsSecondWritesWindow.length === 1 && prefsSecondWritesWindow[0].args.ops[0].value === prefsWindowMissed,
+      JSON.stringify({ missedClick: prefsMissedClick, missed: prefsWindowMissed, stored: prefsStoredAfterMissed.appearance, secondWrites: prefsSecondWritesWindow }));
+    check("the panel that was already open picks that missed change up on its own once the transport is back - no reload, no reopening - and then writes the previous value back from that same panel",
+      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && prefsTransportBack === true && prefsPanelStillOpen === true && prefsRefreshedPanel !== undefined && prefsRefreshedPanel.pressed === prefsRefreshLabel &&
+      /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 1 && prefsWritesReconnect[0].args.ns === "ui-theme" && prefsWritesReconnect[0].args.ops[0].value === prefsWindowBefore && prefsWritesReconnect[0].args.expectedRevision === prefsStoredAfterMissed.appearance.revision &&
+      prefsStoredReconnect.appearance.value.preference === prefsWindowBefore && prefsStoredReconnect.appearance.revision === prefsStoredAfterMissed.appearance.revision + 1 &&
+      prefsAfterReconnect.pressed === prefsWindowBackLabel &&
+      (prefsWindowBefore === "light" ? prefsCubeIsLight(prefsAfterReconnect) : prefsCubeIsDark(prefsAfterReconnect)),
+      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, transportBack: prefsTransportBack, panelStillOpen: prefsPanelStillOpen, windowBefore: prefsWindowBefore, missed: prefsWindowMissed, refreshLabel: prefsRefreshLabel, refreshed: prefsRefreshedPanel, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect.appearance, page: prefsAfterReconnect }));
   } else {
-    check("CONTROL: the same window changes nothing on either side - the open page keeps what it had, and the instance still holds no preference at all",
-      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 0 && prefsStoredReconnect.appearance.value.preference === "system" && prefsStoredReconnect.appearance.revision === 0 && prefsStoredReconnect.language.revision === 0,
-      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect }));
+    check("CONTROL: the other access end's click is its own page's business - the instance records no preference at all, and this page's open panel is untouched by it",
+      /^CLICKED /.test(String(prefsMissedClick)) && prefsSecondWritesWindow.length === 0 && prefsStoredAfterMissed.appearance.value.preference === "system" && prefsStoredAfterMissed.appearance.revision === 0 && prefsStoredAfterMissed.language.revision === 0,
+      JSON.stringify({ missedClick: prefsMissedClick, secondWrites: prefsSecondWritesWindow, stored: prefsStoredAfterMissed }));
+    check("CONTROL: the same window changes nothing on either side - the already-open page keeps exactly the rendering it had (there is nothing to refresh from) and still writes nothing",
+      prefsDocMarkAfterWindow === prefsDocMarkBeforeWindow && prefsPanelStillOpen === true && prefsRefreshedPanel !== undefined && prefsRefreshedPanel.pressed === prefsPageBeforeWindow.pressed && /^CLICKED /.test(String(prefsClickAfterReconnect)) && prefsWritesReconnect.length === 0 && prefsWritesWhileOffline.length === 0 && prefsStoredReconnect.appearance.value.preference === "system" && prefsStoredReconnect.appearance.revision === 0 && prefsStoredReconnect.language.revision === 0 && prefsAfterReconnect.pressed === prefsWindowBackLabel,
+      JSON.stringify({ docMarkBefore: prefsDocMarkBeforeWindow, docMarkAfter: prefsDocMarkAfterWindow, panelStillOpen: prefsPanelStillOpen, refreshed: prefsRefreshedPanel, click: prefsClickAfterReconnect, writes: prefsWritesReconnect, stored: prefsStoredReconnect }));
   }
   assertLiveTransport("afterInstancePreferencesReconnect");
   assertNoStageErrors("afterInstancePreferencesReconnect", true, prefsProbeUrl, true);
+  /* The recovered document then gets the zero-tolerance window the console policy asks for: five seconds in which
+     nothing at all may happen on that same document, judged on those five seconds alone. */
+  await sleep(5000);
+  assertLiveTransport("afterInstancePreferencesReconnectQuiescent");
+  assertNoStageErrors("afterInstancePreferencesReconnectQuiescent", false);
 
   /* G. A fresh process: the bundle list and every stored value are read from disk again, and a document opened
      on the new instance has to read the same preferences back. */
   const prefsStoredBeforeRestart = await preferencesOf();
+  /* Everything the second access end reports from here on is about the instance this stage is about to kill; the
+     tolerance at the end of the stage is tied to both this mark and that authority. */
+  const prefsSecondRestartMark = cdpSecond.eventSeq;
   discontinue("instance restart after the instance preferences");
   instance.child.kill("SIGTERM");
   await sleep(3000);
@@ -3135,16 +3195,43 @@ async function main() {
      appear beyond the transport the instance restart took out from under it (that document was never reloaded),
      and every event it did report is kept in the evidence. */
   const prefsSecondEvents = cdpSecond.errorEvents();
-  const prefsSecondTolerated = prefsSecondEvents.filter((event) => {
-    if (event.method === "Network.loadingFailed") return event.params.canceled === true || isStreamTarget(event.url) || String(event.url).indexOf(prefsRestartAuthority) !== -1;
-    if (event.method === "Log.entryAdded") { const target = isStreamTarget(event.url) ? event.url : (quotedUrl(event.params.entry.text) || event.url); return isStreamTarget(target) || String(event.params.entry.text).indexOf(prefsRestartAuthority) !== -1; }
-    return false;
-  });
-  const prefsSecondUnexpected = prefsSecondEvents.filter((event) => prefsSecondTolerated.includes(event) === false);
+  /* The tolerance is named, not shaped: an event is excused only when it reports a network-layer failure to reach
+     the authority the harness restarted - the second end's own connections to the instance that stopped existing.
+     Nothing else is excused: not "any stream error", not "any cancelled request", and not anything that happened
+     before the restart mark. */
+  const prefsSecondMentionsOldAuthority = (value) => String(value === undefined ? "" : value).indexOf(prefsRestartAuthority) !== -1;
+  const prefsSecondTolerance = (event) => {
+    if (event.method === "Network.loadingFailed") {
+      /* Same structural shape the primary stages use - authority, type, and a network-layer error code - with the
+         authority pinned to the instance this stage restarted, so a failure of any other kind stays fatal. */
+      if (!prefsSecondMentionsOldAuthority(event.url)) return "";
+      if (!/^(Fetch|XHR|EventSource|WebSocket)$/.test(String(event.params.type))) return "";
+      if (event.params.canceled === true) return "the harness's own navigation of this document cancelled a request still in flight to " + prefsRestartAuthority + ", the instance it restarted";
+      if (!/^net::ERR_/.test(String(event.params.errorText))) return "";
+      return isStreamTarget(event.url)
+        ? "the harness restarted " + prefsRestartAuthority + ", so this stream the second access end held on it failed at the network layer (" + String(event.params.errorText) + ")"
+        : "the harness restarted " + prefsRestartAuthority + ", so this request of the second access end could not reach it (" + String(event.params.errorText) + ")";
+    }
+    if (event.method === "Log.entryAdded") {
+      const entry = event.params.entry;
+      if (entry.source !== "network" || !/net::ERR_/.test(String(entry.text))) return "";
+      const echoed = quotedUrl(entry.text);
+      const target = isStreamTarget(event.url) ? event.url : (isStreamTarget(echoed) ? echoed : event.url);
+      if (!prefsSecondMentionsOldAuthority(target)) return "";
+      return "the network Log echo of the second access end losing " + String(target).slice(0, 80) + " on " + prefsRestartAuthority + ", the instance the harness restarted";
+    }
+    return "";
+  };
+  const prefsSecondTolerated = prefsSecondEvents.map((event) => ({ event, reason: prefsSecondTolerance(event) })).filter((item) => item.reason !== "");
+  const prefsSecondUnexpected = prefsSecondEvents.filter((event) => prefsSecondTolerated.some((item) => item.event === event) === false);
+  const prefsSecondToleratedBeforeRestart = prefsSecondTolerated.filter((item) => item.event.seq < prefsSecondRestartMark);
   evidence["console_afterInstancePreferences_secondEnd"] = prefsSecondEvents;
-  evidence["tolerated_afterInstancePreferences_secondEnd"] = prefsSecondTolerated.map((event) => ({ method: event.method, url: event.url, text: String(event.text).slice(0, 200) }));
-  check("the second access end's own console holds nothing beyond the transport the instance restart took out from under it (afterInstancePreferences_secondEnd)",
+  evidence["tolerated_afterInstancePreferences_secondEnd"] = prefsSecondTolerated.map((item) => ({ method: item.event.method, url: item.event.url, reason: item.reason, text: String(item.event.text).slice(0, 200) }));
+  check("the second access end's own console holds nothing beyond losing its connections to the instance the harness restarted (afterInstancePreferences_secondEnd)",
     prefsSecondUnexpected.length === 0, JSON.stringify(prefsSecondUnexpected.slice(0, 3).map((event) => String(event.text).slice(0, 200))));
+  check("the tolerance really is that window: the restart did break the second access end's connections to the old authority, and nothing before the restart needed excusing",
+    prefsSecondTolerated.length > 0 && prefsSecondToleratedBeforeRestart.length === 0 && prefsSecondTolerated.every((item) => prefsSecondMentionsOldAuthority(item.event.url) || prefsSecondMentionsOldAuthority(String(item.event.text))),
+    JSON.stringify({ tolerated: prefsSecondTolerated.length, beforeRestart: prefsSecondToleratedBeforeRestart.length, oldAuthority: prefsRestartAuthority }));
   secondClient.chrome.kill("SIGKILL");
 
   /* H. The whole stage ran through five documents, four of them rebuilt from scratch, and one instance restart:
