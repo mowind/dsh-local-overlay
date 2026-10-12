@@ -120,7 +120,7 @@ export const SURFACE_PLUGIN_PAGES = [
 	{ title: "Web search", ns: "web-search-deepseek", coveredBy: "插件阶段", fields: [
 		{ label: "maxUses", path: "maxUses", fieldId: "plugin-config-web-search-max-uses" },
 	], notDriven: [
-		{ label: "apiKeyEnv", fieldId: "plugin-config-web-search-key" },
+		{ label: "apiKey", fieldId: "plugin-config-web-search-key" },
 		{ label: "endpoint", fieldId: "plugin-config-web-search-endpoint" },
 	] },
 ];
@@ -257,10 +257,10 @@ const SURFACE_HELPERS = [
 	"var menuOptions = function () { return Array.prototype.slice.call(document.querySelectorAll(\"[role=menuitem],[role=option]\")).filter(vis); };",
 ].join(" ");
 
-/* How many row blocks the panel renders for one label: the matches are the divs whose text starts with the
-   label and which own a control, and the ones another match CONTAINS are the same row read again, so only the
-   outermost blocks count. Two sibling blocks with the same copy are two blocks - which is how "the panel
-   renders this row exactly once" is measurable at all. */
+/* How many row blocks the panel renders for one label: the candidates are the divs whose text starts with the
+   label and which own a control, and a candidate that CONTAINS another candidate is that row read again at a
+   wider scope, so only the INNERMOST ones count (a candidate with no candidate inside it). Two sibling blocks
+   with the same copy are two blocks - which is how "the panel renders this row exactly once" is measurable. */
 export const surfaceRowCountExpression = (label) => "(function () { " + SURFACE_HELPERS + " var p = panel(); if (p === null) return -1; var c = Array.prototype.slice.call(p.querySelectorAll(\"div\")).filter(vis).filter(function (d) { return txt(d).indexOf(" + JSON.stringify(label) + ") === 0 && d.querySelector(\"button,[role=switch]\") !== null; }); var blocks = c.filter(function (d) { return c.every(function (o) { return o === d || !d.contains(o); }); }); return blocks.length; })()";
 
 /* Every row the settings panel renders: the smallest labelled block that owns a control. */
@@ -269,6 +269,41 @@ export const SURFACE_ROWS_PROBE = "(function () { " + SURFACE_HELPERS + " var p 
 /* Two ways to see that pressing a control DID something: how many dialogs are visible, and the copy the last
    visible one renders. A negative claim ("using this control writes nothing") is only worth reading next to a
    measurement that the interaction itself happened, so both are read around the click. */
+
+/* Whether the interaction recorded for a row the page keeps to itself really happened - RECOMPUTED from the
+   measured fields, never read off the flag the run derived from them, so the report checks the premise instead of
+   trusting its own conclusion. `expectedOffered` is what the rendered inventory says about that leg (true/false,
+   or null when the caller has no independent source); it is cross-checked so an "unoffered" record cannot hide a
+   row the panel does render. Returns the interaction the measurements support, and why they do not support it. */
+export const verifyNoWriteInteraction = (record, expectedOffered) => {
+	const problems = [];
+	const offered = record.offered === true;
+	if (expectedOffered === true || expectedOffered === false) {
+		if (offered !== expectedOffered) problems.push("recorded as " + (offered ? "offered" : "not offered") + ", but the rendered inventory says " + (expectedOffered ? "it is rendered" : "it is not rendered"));
+	}
+	let interaction = "not-effective";
+	if (offered === false) {
+		interaction = "row-not-offered";
+		if (record.action !== "NO-ROW") problems.push("recorded as not offered, but the run recorded the interaction " + JSON.stringify(record.action));
+		if (JSON.stringify(record.effectBefore) !== JSON.stringify(record.effectAfter)) problems.push("recorded as not offered, but the page changed around the click anyway");
+	} else if (record.kind === "action") {
+		const before = record.effectBefore || {};
+		const after = record.effectAfter || {};
+		const changed = after.dialogs > before.dialogs || after.panel !== before.panel || after.docLength !== before.docLength || after.docTail !== before.docTail;
+		if (record.action === "PRESSED" && changed) interaction = "clicked";
+		else problems.push("the button was not shown to have done anything: the run recorded " + JSON.stringify(record.action) + " and the page " + (changed ? "did change" : "did not change"));
+	} else {
+		const detail = record.detail || {};
+		const options = Array.isArray(detail.options) ? detail.options : [];
+		const moved = record.rowTextAfter !== record.rowTextBefore;
+		if (record.action === "OPENED" && options.length > 0 && detail.action === "PICKED" && moved) interaction = "clicked";
+		else problems.push("the menu was not shown to have done anything: the run recorded " + JSON.stringify(record.action) + ", " + options.length + " option(s), picking " + JSON.stringify(detail.action) + ", and the row copy " + (moved ? "moved" : "did not move"));
+	}
+	/* The run stores the flag after the measurements; the checker recomputes it from those measurements and
+	   compares only when a flag is there to compare with. */
+	if (Object.prototype.hasOwnProperty.call(record, "interaction") && record.interaction !== interaction) problems.push("the record says the interaction was " + JSON.stringify(record.interaction) + ", but the measured fields say " + JSON.stringify(interaction));
+	return { interaction: interaction, ok: problems.length === 0 && interaction !== "not-effective", problems: problems };
+};
 export const SURFACE_EFFECT_PROBE = "(function () { " + SURFACE_HELPERS + " var d = Array.prototype.slice.call(document.querySelectorAll(\"[role=dialog]\")).filter(vis); var doc = (document.body.innerText || document.body.textContent || \"\").replace(/\\s+/g, \" \").trim(); return JSON.stringify({ dialogs: d.length, panel: d.length === 0 ? \"\" : txt(d[d.length - 1]).slice(0, 240), docLength: doc.length, docTail: doc.slice(-120) }); })()";
 
 /* The row's own words, so a drive can name the option it has to move away from. */

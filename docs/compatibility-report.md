@@ -62,14 +62,15 @@
 
 本节的每一格都来自验收跑 `tools/e2e-remote-settings.mjs` 在**原设置面板**上的一次真实点击（或一次「这一行不在这里」的测量），由本生成器从 `evidence/*-evidence.json` 读回；第一列就是页面自己的文案。生成方式：`node tools/settings-report.mjs --write`（不带 `--write` 只打印）。生成器是 fail-closed 的：某个格子在证据里缺记录、写入没有真的落到实例（值不符或 revision 没动）、某一次跑有 FAIL 或 harness 异常、两个模式在 loopback 来源上的行为不一致——任一情况它都会打印问题并以退出码 1 结束，不会渲染一份跑得比证据更多的报告。
 
-- overlay 模式：382 项检查全部通过（失败 0 项）
-- control 模式：184 项检查全部通过（失败 0 项）
+- overlay 模式：383 项检查全部通过（失败 0 项）
+- control 模式：185 项检查全部通过（失败 0 项）
 - 构建身份与来源：provenance verification PASSED: 18 recorded files (3 deliberately modified, 15 byte-identical), 2 pinned package manifests and the build identity bced54ff05f16443... (308 files) match the installed baseline @deepseek-ai/dsh@0.2.1-alpha.2
 - 非 loopback 页面上的设置列表：overlay 共 16 条文本，其中 11 行是登记表里的设置项、5 条是面板自身的控件（导航、关闭、行内控件，以及它自己那句「设置在此不可用」）；control 共 14 条，9 行设置项（Language、Appearance、Font size、Work details、When to Collapse Work Details、Show coding view、Keyboard shortcuts、Send behavior while busy、Performance & usage）、5 条面板自身控件——原组合的远程页面读不到 Host 的设置，所以它能渲染的行更少。
+- 面板上每一行的渲染块数（不是去重后的文本条数）：overlay 在非 loopback 与本机各 11 行都恰好 1 块；control 非 loopback 上它真正渲染的 9 行各 1 块、其余 2 行 0 块，本机 11 行各 1 块；
 
 「本机（loopback）」= 浏览器 origin 与 Host 头都是 loopback（TCP 也都连本机）；「远程（非 loopback）」= origin 与 Host 头是非 loopback 的可信主机名，TCP 仍连本机。两者都跑在**隔离的临时 home 与临时 profile** 上，不是生产实例；生产侧的 Cloudflare、代理与真实认证没有在本轮改动，也没有被验证。
 
-本节的**范围**：General 页的每一行（11 行，其中两行根本不是实例设置）、Agent presets 的默认预设、部署自带的 4 个插件配置页里**每一个可编辑字段**（Web search 的凭据来源与端点字段除外）。这个范围之外的东西逐条列在「本轮没有驱动的部分」，不在这里假装覆盖。
+本节的**范围**：General 页的每一行（11 行，其中两行根本不是实例设置）、Agent presets 的默认预设、部署自带的 4 个插件配置页里**每一个可编辑字段**（Web search 的API key 与端点字段除外）。这个范围之外的东西逐条列在「本轮没有驱动的部分」，不在这里假装覆盖。
 
 
 ### 一次点击的多重效果
@@ -137,13 +138,13 @@
 - `Shell`：该页自己报了 2 个字段（`plugin-config-shell-timeout`、`plugin-config-shell-output`），本轮逐字段驱动 2 个（`plugin-config-shell-timeout`、`plugin-config-shell-output`）——这一页的字段全部驱动过。
 - `Agent loop`：该页自己报了 1 个字段（`plugin-config-agent-loop-parallel`），本轮逐字段驱动 1 个（`plugin-config-agent-loop-parallel`）——这一页的字段全部驱动过。
 - `Subagent`：该页自己报了 2 个字段（`plugin-config-subagent-depth`、`plugin-config-subagent-capacity`），本轮逐字段驱动 2 个（`plugin-config-subagent-capacity`、`plugin-config-subagent-depth`）——这一页的字段全部驱动过。
-- `Web search`：该页自己报了 3 个字段（`plugin-config-web-search-key`、`plugin-config-web-search-endpoint`、`plugin-config-web-search-max-uses`），本轮逐字段驱动 1 个（`plugin-config-web-search-max-uses`）；`plugin-config-web-search-key`（apiKeyEnv）、`plugin-config-web-search-endpoint`（endpoint） 只做清单不做驱动，验收跑不往任何地方写凭据来源或端点。
+- `Web search`：该页自己报了 3 个字段（`plugin-config-web-search-key`、`plugin-config-web-search-endpoint`、`plugin-config-web-search-max-uses`），本轮逐字段驱动 1 个（`plugin-config-web-search-max-uses`）；`plugin-config-web-search-key`（apiKey）、`plugin-config-web-search-endpoint`（endpoint） 只做清单不做驱动，验收跑不往任何地方写API key 或端点。
 
 ### 本轮没有驱动的部分
 
 - 账号级与模型选择类的命名空间（`agent-default-model`、`llm-deepseek`、`llm-deepseek-account`、`ui-settings-account`、`subagent-model-selection-settings`）：逐条理由写在上表里（表源是 `tools/lib/settings-surface.mjs` 的 `SURFACE_GAPS`），验收跑会断言「本轮没写过的命名空间」与那张表**完全一致**，所以新增的命名空间不会被悄悄漏掉。
-- 插件配置页里没有驱动的字段：上一节逐页列出（Web search 的凭据来源与端点字段）。验收跑不往任何地方写凭据或端点，所以这两个字段在矩阵里没有格子，也不借用同一个表单里别的字段的写入。
-- 设置面板另外两页的控件：**Models 页**的 provider 编辑器与 **Built-in plugins 页**的行不在本节矩阵范围内。它们由更早的阶段在**非 loopback** 来源上驱动并核对（provider 的增删、凭据往返，见 §2 的回归表），但本轮没有为它们画「两个来源 × 两种模式」的格子。
+- 插件配置页里没有驱动的字段：上一节逐页列出（Web search 的API key 与端点字段）。验收跑不往任何地方写 API key 或端点，所以这两个字段在矩阵里没有格子，也不借用同一个表单里别的字段的写入。
+- 设置面板另外两页的控件：**Models 页**的自定义 provider 编辑器（新建、编辑、删除与凭据往返）由更早的阶段在**非 loopback** 来源上驱动并核对（见 §2 的回归表），但本轮没有为它画「两个来源 × 两种模式」的格子；**Built-in plugins 页本轮没有测**——验收跑只测到这一页在面板里存在（探针），既没有枚举它的条目，也没有点过它的开关，也没有在任何来源上读过它，所以它既不在矩阵里、也不在任何「已驱动」的清单里。**插件管理页那份证据不能借来充当它的证据**：那测的是独立插件管理器上的第三方测试包与 bundle 开关，不是设置面板内的这一页。
 - 快捷键编辑器内部改键位的行为：本轮只测量了「用这一行打开编辑器不写实例」（而且实例服务的命名空间里没有快捷键这一类）；编辑器里改键位本身没有驱动。
 - 两个不是实例设置的行（`When to Collapse Work Details`、`Keyboard shortcuts`）：值只活在页面里，实例逐命名空间不变——这一条是在两个来源上分别点出来的测量结果，不是推断。
 - 真实部署侧：Cloudflare 边界、跨机器访问、真实账号、既有实例上的 enable/rollback、多访问端并发，见 [release-guide.md](release-guide.md) 第 8 节；本节的全部结论都来自隔离的临时 `DSH_HOME` 与临时 profile。
@@ -155,5 +156,5 @@
 - 隔离验证**不是**生产证明：本报告证明的是"在这个构建 + 这个配置下，替换的机制与边界行为是这些"；
 - 原页面自身的限制（无统一保存提示、无原子事务、无自动回滚、校验反馈就是页面那段文案、顺序写与并发行为）记录在 release-guide §9；
 - 设置面板里有两行根本不是实例设置（`When to Collapse Work Details`、`Keyboard shortcuts`）：点击不发出任何设置写，值只活在页面里——§5 的矩阵把它们标成"非实例设置"，而不是假装它们被持久化了。**快捷键编辑器内部改键位**的行为没有驱动（实例服务的设置命名空间里也没有快捷键这一类）：本轮测到的只是"用这一行打开编辑器不写实例"。
-- 隔离验证的**粒度**是"命名空间 + 面板上的行 + 插件配置页的字段"，不是"每个设置"：General 页逐行驱动、4 个插件配置页逐字段驱动（Web search 的凭据来源与端点字段只做清单），但 **Models 页的 provider 编辑器**与 **Built-in plugins 页**的行不在本报告的能力矩阵里——它们由更早的阶段在非 loopback 来源上驱动核对（§2），没有逐来源的格子。
+- 隔离验证的**粒度**是"命名空间 + 面板上的行 + 插件配置页的字段"，不是"每个设置"：General 页逐行驱动、4 个插件配置页逐字段驱动（Web search 的 API key 与端点字段只做清单）。**Models 页的自定义 provider 编辑器**由更早的阶段在非 loopback 来源上驱动核对（新建、编辑、删除、凭据往返，§2），但没有逐来源的格子；**Built-in plugins 页本轮根本没有测**——只测到这一页在设置面板里存在，既没有枚举它的条目，也没有点过它的开关，也没有在任何来源上读过它（**插件管理页那份证据不能借来充当它的证据**）。
 - 原组合的远程页面读不到 Host 的设置，所以 §5 的 control 列里有些行写的是"原组合的远程页面根本不渲染这一行"——这是**测出来的**，不是推断。

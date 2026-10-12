@@ -8,7 +8,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SURFACE_GAPS, SURFACE_PLUGIN_FIELDS, SURFACE_PLUGIN_PAGES, SURFACE_PRESET_NS, SURFACE_ROWS, verifySettingsWrite, writePathOf, writeValueOf } from "./lib/settings-surface.mjs";
+import { SURFACE_GAPS, SURFACE_PLUGIN_FIELDS, SURFACE_PLUGIN_PAGES, SURFACE_PRESET_NS, SURFACE_ROWS, verifyNoWriteInteraction, verifySettingsWrite, writePathOf, writeValueOf } from "./lib/settings-surface.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..");
@@ -42,9 +42,33 @@ const load = async (mode) => {
 	}
 	const parsed = JSON.parse(raw);
 	if (parsed.harnessError !== undefined && parsed.harnessError !== null) complain("the " + mode + " evidence carries a harnessError: " + JSON.stringify(parsed.harnessError).slice(0, 300));
-	const failed = (parsed.checks || []).filter((entry) => entry.ok !== true);
+	/* An evidence file whose check list is missing or empty is not a green run: it is a run whose results were
+	   not recorded, and rendering "0 checks passed" from it would be the report claiming more than it holds. */
+	if (Array.isArray(parsed.checks) === false || parsed.checks.length === 0) {
+		complain("the " + mode + " evidence carries no check records at all, so there is no run to render");
+		return null;
+	}
+	for (const entry of parsed.checks) {
+		if (typeof entry.name !== "string" || entry.name.length === 0 || typeof entry.ok !== "boolean") {
+			complain("the " + mode + " evidence has a check record without a name or a boolean result: " + JSON.stringify(entry).slice(0, 120));
+			break;
+		}
+	}
+	const failed = parsed.checks.filter((entry) => entry.ok !== true);
 	for (const entry of failed.slice(0, 5)) complain("the " + mode + " run has a failing check: " + entry.name);
 	if (failed.length > 5) complain("the " + mode + " run has " + failed.length + " failing checks in all");
+	/* The report states specific things about this run - that every row was rendered exactly once, that the two
+	   rows the page keeps to itself were really used, that using them wrote nothing and moved nothing. Those
+	   sentences are only allowed next to the checks that measured them, so a truncated check list is refused. */
+	const claimed = [
+		[ /row block/, "the structural row-block count" ],
+		[ /really was used on the (remote|loopback) origin|is not offered on the (remote|loopback) origin at all/, "the interaction of a row the page keeps to itself" ],
+		[ /is not an instance setting/, "the zero-write measurement of that row" ],
+		[ /leaves the instance untouched/, "the namespace snapshot around that row" ],
+	];
+	for (const entry of claimed) {
+		if (parsed.checks.some((check) => entry[0].test(check.name)) === false) complain("the " + mode + " evidence has no check for " + entry[1] + ", which this report states: the check list does not support the claims made from it");
+	}
 	const surface = parsed.settingsSurface;
 	if (surface === undefined) {
 		complain("the " + mode + " evidence carries no settingsSurface section: it was written before the settings-surface stage existed, so there is nothing to render");
@@ -95,17 +119,49 @@ const verifyInstanceWrite = (mode, leg, origin, label, expect, drive) => {
 	noteOthers(mode, leg, label, verdict);
 };
 
-const verifyNoWrite = (mode, leg, row, record) => {
+/* What that LEG really rendered, in the report's own reading: the remote leg has the rendered inventory (and the
+   structural counts recorded with it), the loopback leg has the per-leg structural counts this run now records.
+   A row the panel does not render cannot have been clicked, so this is the answer "offered" is checked against. */
+const offeredOn = (surface, leg, label) => {
+	if (leg === "remote") return (surface.rowsOfferedRemote || []).indexOf(label) !== -1;
+	return (surface.rowCountsLoopback || {})[label] === 1;
+};
+
+/* The structural counts, per leg: "this row is rendered exactly once" as a count of row BLOCKS, because the
+   panel's text list is deduplicated by copy and would hide a second block with the same words. Overlay renders
+   every row on both origins; the original composition's remote document renders a subset, and the rows it does
+   not render have to count zero rather than being silently absent from the record. */
+const verifyRowCounts = (mode, surface) => {
+	const remote = surface.rowCounts;
+	if (remote === undefined || remote === null || typeof remote !== "object") {
+		complain(mode + ": the evidence carries no structural row counts for the non-loopback panel, so \"this row is rendered once\" would rest on a deduplicated text list");
+		return;
+	}
+	const loopback = surface.rowCountsLoopback;
+	if (loopback === undefined || loopback === null || typeof loopback !== "object") complain(mode + ": the evidence carries no structural row counts for the loopback panel");
+	for (const row of SURFACE_ROWS) {
+		const offered = offeredOn(surface, "remote", row.label);
+		const count = remote[row.label];
+		if (typeof count !== "number" || Number.isInteger(count) === false) complain(mode + ": the non-loopback panel has no integer block count for the " + row.label + " row (" + JSON.stringify(count) + ")");
+		else if (count !== (offered ? 1 : 0)) complain(mode + ": the non-loopback panel counts " + count + " block(s) for the " + row.label + " row, but it " + (offered ? "renders" : "does not render") + " it");
+		if (loopback !== undefined && loopback !== null) {
+			const loopCount = loopback[row.label];
+			if (loopCount !== 1) complain(mode + ": the loopback panel counts " + JSON.stringify(loopCount) + " block(s) for the " + row.label + " row; a loopback page renders every recorded row exactly once");
+		}
+	}
+};
+const verifyNoWrite = (mode, leg, row, record, expectedOffered) => {
 	if (record === undefined) {
 		complain(mode + "/" + leg + ": no record for the non-instance row " + row.label);
 		return;
 	}
-	/* "It writes nothing" is only worth reading when the control was actually used: a row whose selector stopped
-	   matching would produce the same empty write list, so the interaction is checked first on the legs where the
-	   row is offered, and the leg where it is not offered has to say exactly that. */
-	if (record.offered === false) {
-		if (record.interaction !== "row-not-offered") complain(mode + "/" + leg + ": the " + row.label + " row is recorded as not offered, but the evidence does not say so (" + JSON.stringify(record.interaction) + ", action " + JSON.stringify(record.action) + ")");
-	} else if (record.interaction !== "clicked") complain(mode + "/" + leg + ": the " + row.label + " row is recorded as not an instance setting, but using it did not visibly work (" + JSON.stringify(record.interaction) + ", action " + JSON.stringify(record.action) + ") - a control that is no longer found would read the same way");
+	/* "It writes nothing" is only worth reading when the control was actually used: a selector that stopped
+	   matching would produce the same empty write list. The premise is RECOMPUTED from the measured fields by the
+	   shared helper (tools/lib/settings-surface.mjs) instead of being read off the flag the run derived from them,
+	   and the offered/not-offered answer is cross-checked against what that leg really rendered. */
+	const reading = verifyNoWriteInteraction(record, expectedOffered);
+	for (const problem of reading.problems) complain(mode + "/" + leg + ": " + row.label + "：" + problem);
+	if (reading.ok !== true) complain(mode + "/" + leg + ": the " + row.label + " row is recorded as not an instance setting, but the measurements do not show that the control was used, so that claim has no premise");
 	if ((record.writes || []).length !== 0) complain(mode + "/" + leg + ": the " + row.label + " row wrote " + JSON.stringify(record.writes) + " although it is recorded as not an instance setting");
 	if (record.instanceUnchanged !== true) complain(mode + "/" + leg + ": the " + row.label + " row left the instance changed");
 };
@@ -144,7 +200,7 @@ const verifyRestart = (mode, surface) => {
 
 const overlay = await load("overlay");
 const control = await load("control");
-for (const loaded of [overlay, control]) if (loaded !== null) verifyRestart(loaded.mode, loaded.surface);
+for (const loaded of [overlay, control]) if (loaded !== null) { verifyRestart(loaded.mode, loaded.surface); verifyRowCounts(loaded.mode, loaded.surface); }
 /* The matrix is a two-sided claim - every cell is a comparison between the replacement and the original - so a
    report with one side missing would have to print "unknown" in half of its columns. Refused, not half-rendered. */
 if (overlay === null || control === null) {
@@ -174,7 +230,7 @@ if (overlay !== null) {
 		for (const row of drivenRows) verifyInstanceWrite("overlay", leg, leg, "the " + row.label + " row", { kind: "mutate", ns: row.ns, path: [row.path] }, drives.get(row.label));
 		verifyPreset("overlay", leg, leg, drives.get(PRESET_ROW));
 		for (const field of liveFields) verifyInstanceWrite("overlay", leg, leg, fieldLabelOf(field), { kind: "mutate", ns: field.ns, path: [field.path] }, fieldDriveOf(overlay.surface, field, leg));
-		for (const row of noWriteRowSpecs) verifyNoWrite("overlay", leg, row, noWritesOf(overlay.surface, leg).get(row.label));
+		for (const row of noWriteRowSpecs) verifyNoWrite("overlay", leg, row, noWritesOf(overlay.surface, leg).get(row.label), offeredOn(overlay.surface, leg, row.label));
 	}
 
 	const coverage = overlay.surface.coverage || {};
@@ -230,7 +286,7 @@ if (control !== null) {
 	for (const row of drivenRows) verifyInstanceWrite("control", "loopback", "loopback", "the " + row.label + " row", { kind: "mutate", ns: row.ns, path: [row.path] }, loopbackDrives.get(row.label));
 	verifyPreset("control", "loopback", "loopback", loopbackDrives.get(PRESET_ROW));
 	for (const field of liveFields) verifyInstanceWrite("control", "loopback", "loopback", fieldLabelOf(field), { kind: "mutate", ns: field.ns, path: [field.path] }, fieldDriveOf(control.surface, field, "loopback"));
-	for (const leg of ["remote", "loopback"]) for (const row of noWriteRowSpecs) verifyNoWrite("control", leg, row, noWritesOf(control.surface, leg).get(row.label));
+	for (const leg of ["remote", "loopback"]) for (const row of noWriteRowSpecs) verifyNoWrite("control", leg, row, noWritesOf(control.surface, leg).get(row.label), offeredOn(control.surface, leg, row.label));
 
 	const pluginPages = control.surface.pluginPagesControl;
 	if (pluginPages === undefined) complain("control: no record of the plugin manager list");
@@ -277,7 +333,7 @@ if (overlay !== null && control !== null) {
 		const left = writeOf(fieldDriveOf(overlay.surface, field, "loopback"), field.ns);
 		const right = writeOf(fieldDriveOf(control.surface, field, "loopback"), field.ns);
 		if (left === null || right === null) complain("the loopback leg of " + fieldLabelOf(field) + " is missing in one of the two modes");
-		else if (left.ns !== right.ns || left.kind !== right.kind || JSON.stringify(left.path) !== JSON.stringify(right.path)) complain("the loopback leg differs between the two modes on " + fieldLabelOf(field) + + " page: overlay " + JSON.stringify(left) + " vs control " + JSON.stringify(right));
+		else if (left.ns !== right.ns || left.kind !== right.kind || JSON.stringify(left.path) !== JSON.stringify(right.path)) complain("the loopback leg of " + fieldLabelOf(field) + " differs between the two modes: overlay " + JSON.stringify(left) + " vs control " + JSON.stringify(right));
 	}
 	const overlayOffered = overlay.surface.rowsOfferedRemote || [];
 	const controlOffered = control.surface.rowsOfferedRemote || [];
@@ -393,7 +449,7 @@ const fieldNote = () => {
 		const driven = page.fields.map((field) => "`" + field.fieldId + "`");
 		const rest = (page.notDriven || []).map((field) => "`" + field.fieldId + "`（" + field.label + "）");
 		lines.push("- `" + page.title + "`：该页自己报了 " + reported.length + " 个字段（" + reported.map((id) => "`" + id + "`").join("、") + "），本轮逐字段驱动 " + driven.length + " 个（" + driven.join("、") + "）"
-			+ (rest.length === 0 ? "——这一页的字段全部驱动过。" : "；" + rest.join("、") + " 只做清单不做驱动，验收跑不往任何地方写凭据来源或端点。"));
+			+ (rest.length === 0 ? "——这一页的字段全部驱动过。" : "；" + rest.join("、") + " 只做清单不做驱动，验收跑不往任何地方写API key 或端点。"));
 	}
 	return lines.join("\n");
 };
@@ -416,8 +472,8 @@ const controlChrome = ((control === null ? {} : control.surface).renderedInvento
 const notesSection = notes.length === 0 ? [] : ["", "### 一次点击的多重效果", "", ...notes.map((entry) => "- " + entry), ""];
 const notDriven = [
 	"- 账号级与模型选择类的命名空间（" + SURFACE_GAPS.map((gap) => "`" + gap.ns + "`").join("、") + "）：逐条理由写在上表里（表源是 `tools/lib/settings-surface.mjs` 的 `SURFACE_GAPS`），验收跑会断言「本轮没写过的命名空间」与那张表**完全一致**，所以新增的命名空间不会被悄悄漏掉。",
-	"- 插件配置页里没有驱动的字段：上一节逐页列出（Web search 的凭据来源与端点字段）。验收跑不往任何地方写凭据或端点，所以这两个字段在矩阵里没有格子，也不借用同一个表单里别的字段的写入。",
-	"- 设置面板另外两页的控件：**Models 页**的 provider 编辑器与 **Built-in plugins 页**的行不在本节矩阵范围内。它们由更早的阶段在**非 loopback** 来源上驱动并核对（provider 的增删、凭据往返，见 §2 的回归表），但本轮没有为它们画「两个来源 × 两种模式」的格子。",
+	"- 插件配置页里没有驱动的字段：上一节逐页列出（Web search 的API key 与端点字段）。验收跑不往任何地方写 API key 或端点，所以这两个字段在矩阵里没有格子，也不借用同一个表单里别的字段的写入。",
+	"- 设置面板另外两页的控件：**Models 页**的自定义 provider 编辑器（新建、编辑、删除与凭据往返）由更早的阶段在**非 loopback** 来源上驱动并核对（见 §2 的回归表），但本轮没有为它画「两个来源 × 两种模式」的格子；**Built-in plugins 页本轮没有测**——验收跑只测到这一页在面板里存在（探针），既没有枚举它的条目，也没有点过它的开关，也没有在任何来源上读过它，所以它既不在矩阵里、也不在任何「已驱动」的清单里。**插件管理页那份证据不能借来充当它的证据**：那测的是独立插件管理器上的第三方测试包与 bundle 开关，不是设置面板内的这一页。",
 	"- 快捷键编辑器内部改键位的行为：本轮只测量了「用这一行打开编辑器不写实例」（而且实例服务的命名空间里没有快捷键这一类）；编辑器里改键位本身没有驱动。",
 	"- 两个不是实例设置的行（`When to Collapse Work Details`、`Keyboard shortcuts`）：值只活在页面里，实例逐命名空间不变——这一条是在两个来源上分别点出来的测量结果，不是推断。",
 	"- 真实部署侧：Cloudflare 边界、跨机器访问、真实账号、既有实例上的 enable/rollback、多访问端并发，见 [release-guide.md](release-guide.md) 第 8 节；本节的全部结论都来自隔离的临时 `DSH_HOME` 与临时 profile。",
@@ -433,10 +489,13 @@ const block = [
 	"- control 模式：" + (control === null ? "缺证据" : counts(control)),
 	identity === "" ? "- 构建身份：见 `evidence/*-evidence.json` 的 `provenancePreflight`" : "- 构建身份与来源：" + identity,
 	"- 非 loopback 页面上的设置列表：overlay 共 " + overlayRendered.length + " 条文本，其中 " + (overlayRendered.length - overlayChrome.length) + " 行是登记表里的设置项、" + overlayChrome.length + " 条是面板自身的控件（导航、关闭、行内控件，以及它自己那句「设置在此不可用」）；control 共 " + (controlOffered.length + controlChrome.length) + " 条，" + controlOffered.length + " 行设置项（" + controlOffered.join("、") + "）、" + controlChrome.length + " 条面板自身控件——原组合的远程页面读不到 Host 的设置，所以它能渲染的行更少。",
-	"",
+		/* The structural count belongs in the evidence list too: the report claims the panel renders each row exactly
+	   once, and a reader should not have to open the JSON to see what that claim was measured on. */
+	"- 面板上每一行的渲染块数（不是去重后的文本条数）：overlay 在非 loopback 与本机各 11 行都恰好 1 块；control 非 loopback 上它真正渲染的 " + (control === null ? "?" : String((control.surface.rowsOfferedRemote || []).length)) + " 行各 1 块、其余 " + (control === null ? "?" : String(SURFACE_ROWS.length - (control.surface.rowsOfferedRemote || []).length)) + " 行 0 块，本机 11 行各 1 块；",
+"",
 	"「本机（loopback）」= 浏览器 origin 与 Host 头都是 loopback（TCP 也都连本机）；「远程（非 loopback）」= origin 与 Host 头是非 loopback 的可信主机名，TCP 仍连本机。两者都跑在**隔离的临时 home 与临时 profile** 上，不是生产实例；生产侧的 Cloudflare、代理与真实认证没有在本轮改动，也没有被验证。",
 	"",
-	"本节的**范围**：General 页的每一行（11 行，其中两行根本不是实例设置）、Agent presets 的默认预设、部署自带的 4 个插件配置页里**每一个可编辑字段**（Web search 的凭据来源与端点字段除外）。这个范围之外的东西逐条列在「本轮没有驱动的部分」，不在这里假装覆盖。",
+	"本节的**范围**：General 页的每一行（11 行，其中两行根本不是实例设置）、Agent presets 的默认预设、部署自带的 4 个插件配置页里**每一个可编辑字段**（Web search 的API key 与端点字段除外）。这个范围之外的东西逐条列在「本轮没有驱动的部分」，不在这里假装覆盖。",
 	"",
 	...notesSection,
 	"### 设置面板逐项",
@@ -482,4 +541,3 @@ if (shouldWrite === false) {
 	await writeFile(docPath, doc);
 	console.log("wrote " + docPath + " (" + block.split("\n").length + " lines)");
 }
-

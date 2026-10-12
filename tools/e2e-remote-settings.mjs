@@ -6,7 +6,7 @@ import http from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clientRpcCalls, namespaceFacts, namespaceOf, namespaceSummary, pageSettingsWrites, settingsMutates, verifySettingsWrite, writeRecordOf, writtenNamespaces, authorityOf, pathnameOf, SURFACE_GAPS, SURFACE_EFFECT_PROBE, SURFACE_MENU_PROBE, SURFACE_PANEL_ENGLISH_PROBE, SURFACE_PLUGIN_FIELDS, SURFACE_PLUGIN_PAGES, SURFACE_PRESET_NS, SURFACE_ROWS, SURFACE_ROWS_PROBE, surfaceAriaPressExpression, surfaceCubeExpression, surfaceCubeStateExpression, surfaceExactClickExpression, surfaceOpenExpression, surfacePickExpression, surfaceRenderedInventory, surfaceRowCountExpression, surfaceRowTextExpression, surfaceSwitchExpression, surfaceSwitchStateExpression } from "./lib/settings-surface.mjs";
+import { clientRpcCalls, namespaceFacts, namespaceOf, namespaceSummary, pageSettingsWrites, settingsMutates, verifySettingsWrite, writeRecordOf, writtenNamespaces, authorityOf, pathnameOf, SURFACE_GAPS, SURFACE_EFFECT_PROBE, verifyNoWriteInteraction, SURFACE_MENU_PROBE, SURFACE_PANEL_ENGLISH_PROBE, SURFACE_PLUGIN_FIELDS, SURFACE_PLUGIN_PAGES, SURFACE_PRESET_NS, SURFACE_ROWS, SURFACE_ROWS_PROBE, surfaceAriaPressExpression, surfaceCubeExpression, surfaceCubeStateExpression, surfaceExactClickExpression, surfaceOpenExpression, surfacePickExpression, surfaceRenderedInventory, surfaceRowCountExpression, surfaceRowTextExpression, surfaceSwitchExpression, surfaceSwitchStateExpression } from "./lib/settings-surface.mjs";
 
 const TEST_HOST = process.env.TEST_HOST || "dsh-proto.test";
 const CHROMIUM = process.env.CHROMIUM || "/usr/sbin/chromium";
@@ -3253,7 +3253,8 @@ async function main() {
      cannot quietly fall outside the inventory, and no report can claim coverage this run did not reach.
      ----------------------------------------------------------------------------------------------------- */
   /* The rows the pinned build renders in the settings panel. `coveredBy` names the stage that already drives
-     the row (and writes the namespace it belongs to); the rows nothing drives yet are driven by this stage.
+     the row (and writes the namespace it belongs to) - a NOTE in the report, never a reason to leave this
+     stage's own cells empty: every row that writes is driven here again, per leg, on both origins.
      The two rows with `writes: false` are the finding, not an omission: their click sends nothing at all, in
      either mode, so the page keeps them to itself and the report says so rather than implying they persist. */
   /* The inventory itself - the rows the panel renders, the pages the deployment ships, and the namespaces this
@@ -3456,22 +3457,20 @@ async function main() {
        happened: a selector that stopped matching would otherwise read as "using this control writes nothing",
        which is the one way this row could lie. So the interaction is measured too - and on a leg where the row
        is not offered at all, the honest measurement is that there was nothing to click. */
-    const effectHappened = spec.kind === "action"
-      ? action === "PRESSED" && (effectAfter.dialogs > effectBefore.dialogs || effectAfter.panel !== effectBefore.panel || effectAfter.docLength !== effectBefore.docLength || effectAfter.docTail !== effectBefore.docTail)
-      : action === "OPENED" && detail !== null && detail.options.length > 0 && detail.action === "PICKED" && record.rowTextAfter !== record.rowTextBefore;
-    record.interaction = record.offered === false ? "row-not-offered" : (effectHappened ? "clicked" : "not-effective");
+    const interactionReading = verifyNoWriteInteraction(record, null);
+    record.interaction = interactionReading.interaction;
     check(record.offered === false
       ? "the " + spec.label + " row is not offered on the " + leg + " origin at all, so there is nothing to click there and nothing it could write"
       : "the " + spec.label + " row really was used on the " + leg + " origin (" + (spec.kind === "action" ? "the button was pressed and the page changed" : "the menu opened, an option other than the current one was picked, and the row copy moved") + ") - so that what follows is a measurement of a click that happened",
-      record.offered === false ? action === "NO-ROW" && JSON.stringify(effectBefore) === JSON.stringify(effectAfter) : effectHappened === true,
+      interactionReading.ok === true,
       JSON.stringify({ offered: record.offered, action, detail, rowTextBefore: record.rowTextBefore, rowTextAfter: record.rowTextAfter, effectBefore, effectAfter }));
     check("the " + spec.label + " row is not an instance setting: using it on the " + leg + " origin sends no settings write at all", record.writes.length === 0, JSON.stringify(record.writes));
     check("the " + spec.label + " row leaves the instance untouched on the " + leg + " origin - every namespace keeps its value and its revision", record.instanceUnchanged === true, "namespaces=" + namespaceSummary(namespacesAfter).length);
     return record;
   };
   /* The namespaces this stage drives, and the ones the page keeps to itself. `coveredBy` marks the rows an
-     earlier stage already drives (and whose namespace that stage writes): they stay in the inventory - the
-     ledger below counts their writes too - but this stage does not repeat their clicks. */
+     earlier stage already drives (and whose namespace that stage writes): they stay in the inventory, the
+     ledger below counts every write including theirs, and this stage drives them again anyway. */
   /* Every row that writes something, INCLUDING the ones an earlier stage already drives: the matrix has to be
      measured per leg for the same rows on both origins, and "an earlier stage drove it" is a note in the report,
      not a licence to leave this stage's own cells empty. */
@@ -3524,8 +3523,8 @@ async function main() {
     check("CONTROL: the original composition's remote page renders " + surfaceRowsOffered.length + " of the " + SETTINGS_SURFACE_ROWS.length + " recorded rows (" + surfaceRowsOffered.join(", ") + "); which ones is a measurement the report prints, not an assumption", surfaceRowsOffered.length > 0 && surfaceRowInventory.duplicated.length === 0, JSON.stringify({ offered: surfaceRowsOffered, rendered: surfaceRendered.length }));
   }
   check("the panel renders nothing this inventory does not know: whatever else it draws has to be the panel's own chrome (its navigation, close button, the rows' inline controls, and the page's own \"settings are unavailable\" notice), so a settings row added by a later build fails here instead of leaving the report's claim behind", surfaceRowInventory.unknown.length === 0, JSON.stringify({ unknown: surfaceRowInventory.unknown, chrome: surfaceRowInventory.chrome, rows: surfaceRowInventory.rows.length }));
-  /* The rows nothing drove yet, clicked on the non-loopback origin: the overlay has to reach the instance
-     from here, the original composition may not. */
+  /* Every row that writes, clicked on the non-loopback origin: the overlay has to reach the instance from
+     here, the original composition may not. */
   for (const spec of SURFACE_DRIVE_ORDER) checkSurfaceDrive(await driveSurfaceRow(spec, MODE === "overlay" ? "instance" : "page", "remote"));
   settingsSurface.languageAfterRemoteDrive = await surfaceNormaliseLanguage();
   /* The Agent presets section is not a row but a whole section of the same panel, and it writes through
@@ -3595,7 +3594,17 @@ async function main() {
   /* The two rows the page keeps to itself are measured on this leg too: the report prints one observation per
      origin instead of copying the remote one into all four cells. The panel is back on the General section. */
   settingsSurface.backToGeneralOnLoopback = await surfaceOpenSection("General");
-  for (const spec of SURFACE_NO_WRITE) await driveSurfaceNoWriteRow(spec, "loopback");
+  /* The same structural count on the LOOPBACK panel, recorded per leg so the report can cross-check what each
+     leg says about a row being offered against what that leg actually rendered (a text list cannot). Read while
+     the panel is still on General: the drives below press controls that move the panel elsewhere. */
+  const surfaceRowCountsLoopback = {};
+  for (const spec of SETTINGS_SURFACE_ROWS) surfaceRowCountsLoopback[spec.label] = Number(await cdp.eval(surfaceRowCountExpression(spec.label)));
+  settingsSurface.rowCountsLoopback = surfaceRowCountsLoopback;
+  const surfaceLoopbackCountOffenders = SETTINGS_SURFACE_ROWS.filter((spec) => surfaceRowCountsLoopback[spec.label] !== 1).map((spec) => spec.label + "=" + surfaceRowCountsLoopback[spec.label]);
+  check("every row of the standard settings panel is rendered as exactly ONE row block on the LOOPBACK origin too - in both modes, because the replacement must not change what a loopback page renders",
+    surfaceLoopbackCountOffenders.length === 0, JSON.stringify({ counts: surfaceRowCountsLoopback, offenders: surfaceLoopbackCountOffenders }));
+  const surfaceLoopbackDriven = [];
+  for (const spec of SURFACE_NO_WRITE) surfaceLoopbackDriven.push(await driveSurfaceNoWriteRow(spec, "loopback"));
   /* The deployment's own configuration pages in the plugin manager. With the replacement they are offered and
      their forms write the instance through the standard slot; with the original composition the very same
      pages are not offered on a remote origin at all. */
@@ -3612,11 +3621,35 @@ async function main() {
        the original composition already does it), which is what makes the plugin table a two-ended matrix. */
     await navigate(leg === "loopback" ? instance.url : surfaceRemoteUrl);
     await waitFor(cdp, SHELL_PROBE, "app shell (" + page.title + " page, " + leg + " origin)", 60000);
-    const opened = await openItemPage("driving the " + page.title + " page on the " + leg + " origin", page.title, field.fieldId);
+    /* Opening a card can land under the app's onboarding notice ("Add an API key to get started"), which makes
+       the shell inert and, once in a while, survives the driver's dismissal rounds. One retry on a FRESH document
+       is enough to tell a lost race from a page that really cannot be driven; the second failure is reported, and
+       the number of attempts is recorded instead of being swallowed. */
+    let opened = null;
+    let attempts = 0;
+    while (opened === null) {
+      attempts += 1;
+      try {
+        opened = await openItemPage("driving the " + page.title + " page on the " + leg + " origin", page.title, field.fieldId);
+      } catch (error) {
+        if (attempts > 1) throw error;
+        console.error("retrying once: " + String(error.message).slice(0, 160));
+        await navigate(leg === "loopback" ? instance.url : surfaceRemoteUrl);
+        await waitFor(cdp, SHELL_PROBE, "app shell (" + page.title + " page, " + leg + " origin, retry)", 60000);
+      }
+    }
     const before = await surfaceNamespace(page.ns);
     const fieldBefore = fieldOf(await pageFields([field.fieldId]), field.fieldId);
     let chosen = null;
     for (const candidate of surfaceNumberCandidates(fieldBefore.value)) {
+      /* The app can put its onboarding notice ("Add an API key to get started") back over a FRESH document, and
+         while it is up the shell is inert, so focus is refused and typing would land nowhere. Whatever is left
+         after settlePage is dismissed again here, right before the keystrokes. */
+      const blocked = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.blockers())"));
+      if (blocked.count !== 0) {
+        await cdp.eval("window.__e2ePlugins.dismiss()");
+        await sleep(1500);
+      }
       await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(field.fieldId) + ")", candidate);
       const readback = fieldOf(await pageFields([field.fieldId]), field.fieldId);
       const save = await pageSave();
@@ -3628,7 +3661,7 @@ async function main() {
     await sleep(2500);
     const writes = surfaceWritesSince(mark);
     return {
-      page: page.title, field: field.label, leg: leg, ns: page.ns, path: field.path, fieldId: field.fieldId, opened: { items: opened.items.length, fieldIds: opened.detail.fieldIds, configCount: opened.detail.configCount },
+      page: page.title, field: field.label, leg: leg, attempts: attempts, ns: page.ns, path: field.path, fieldId: field.fieldId, opened: { items: opened.items.length, fieldIds: opened.detail.fieldIds, configCount: opened.detail.configCount },
       fieldBefore, chosen, clicked, before, after: await surfaceNamespace(page.ns),
       writes: writes.map((write) => Object.assign(writeRecordOf(write), { origin: surfaceOriginOf(write) })),
     };
