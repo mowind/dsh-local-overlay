@@ -1,0 +1,9 @@
+# The probe bundle's own layer. It inserts the single row this fixture needs, so
+# the profile receives it through the ordinary bundle mechanism: nothing installs
+# it by hand and nothing in the replacement package knows it exists.
+#
+# The row id below is also the settings namespace the Host serves for this plugin.
+
+- insert:
+    - id: e2e-config-probe
+      name: '@dsh-local-overlay/e2e-config-probe'

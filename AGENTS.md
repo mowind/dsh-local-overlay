@@ -11,3 +11,9 @@ The five canonical triage roles map to identically-named labels (`needs-triage`,
 ### Domain docs
 
 Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Verification
+
+### E2E runs
+
+Run `tools/e2e-remote-settings.mjs` on a profile of its own: `DSH_PROFILE=e2e node tools/e2e-remote-settings.mjs` (the script names its profile from that variable, default `e2e`), or a copy of a profile in a temporary directory. The profile this session was booted in (`$DSH_HOME/profiles/$DSH_PROFILE`) stays byte-identical.

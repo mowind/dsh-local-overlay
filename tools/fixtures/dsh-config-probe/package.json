@@ -1,0 +1,24 @@
+{
+  "name": "@dsh-local-overlay/e2e-config-probe",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Third-party probe bundle the end-to-end suite installs through `dsh plugin add`: a standard plugin whose configuration the original Plugins page can read and save from a remote origin",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

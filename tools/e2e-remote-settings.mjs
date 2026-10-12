@@ -46,6 +46,54 @@ const PAGE_PROVIDER_2_BASE = "https://e2e-relay.test/v1";
 const PAGE_KEY_REF_2 = "E2E_PAGE_RELAY_API_KEY";
 const PAGE_KEY_2_OF_2 = "e2e-page-relay-key-4444";
 const PAGE_SECRETS = [PAGE_KEY_1, PAGE_KEY_2, PAGE_KEY_3, PAGE_KEY_ROTATED, PAGE_KEY_2_OF_2];
+
+/* The THIRD-PARTY probe bundle the last stage installs (issue #5). Everything below belongs to the BUNDLE:
+   its package name, the row it registers under, and the ids and copy it chose for its own form. The suite
+   asserts that the page rendered exactly that, which is also what shows the form came from the installed
+   package and not from anything this repository knows. The values are fixtures of one throwaway run. */
+const PROBE_PACKAGE = OVERLAY_SCOPE + "/e2e-config-probe";
+const PROBE_NS = "e2e-config-probe";
+const PROBE_LABEL_FIELD = "plugin-config-probe-label";
+const PROBE_ATTEMPTS_FIELD = "plugin-config-probe-attempts";
+const PROBE_DEFAULT_LABEL = "probe-default";
+const PROBE_DEFAULT_ATTEMPTS = 3;
+/* Test-only drafts and field inputs. None of them is a secret; they only ever exist inside this run's profile. */
+const PROBE_DRAFT = "probe-draft-from-the-page";
+const PROBE_OTHER_END = "probe-written-by-the-other-end";
+const PROBE_CONFLICT_DRAFT = "probe-draft-against-a-stale-revision";
+const PROBE_FAILED_DRAFT = "probe-draft-that-cannot-land";
+const PROBE_OUT_OF_RANGE = 10;
+const PROBE_UNPARSEABLE = "not-a-number";
+const PROBE_COPY = {
+  title: "Probe configuration",
+  labelHint: "Staged until you save; the instance keeps its own value until then.",
+  attemptsHint: "A whole number between 1 and 9.",
+  invalidNumber: "Enter a whole number, or leave the field empty.",
+  save: "Save probe",
+  saveFailed: "The deployment did not accept these values; they were left for you to correct.",
+};
+/* The deployment's OWN explicit-save plugin form, reachable from the same remote plugin list: the Web search
+   page, registered in the standard slot by the package that ships with the deployment while the Host serves the
+   provider's namespace. Every id and every line of copy below belongs to the PRODUCT, not to this repository -
+   they are asserted verbatim because matching them is what shows the page rendered the deployment's own form. */
+const SHIPPED_ITEM = "Web search";
+const SHIPPED_NS = "web-search-deepseek";
+const SHIPPED_KEY_FIELD = "plugin-config-web-search-key";
+const SHIPPED_ENDPOINT_FIELD = "plugin-config-web-search-endpoint";
+const SHIPPED_MAX_USES_FIELD = "plugin-config-web-search-max-uses";
+const SHIPPED_COPY = {
+  description: "Set up the DeepSeek search provider.",
+  baseUrlHint: "Leave blank to use the provider default.",
+  maxUsesHint: "How many times one request may search before it must answer.",
+  save: "Save",
+  invalidNumber: "Enter a number, or leave blank to use the default.",
+  saveFailed: "The deployment did not accept these values; they were left for you to correct.",
+};
+/* Test-only drafts for the deployment's own form: the value this stage saves, the draft the other end's write
+   makes stale, and the value that other end stores. */
+const SHIPPED_SAVED_MAX_USES = 7;
+const SHIPPED_STALE_MAX_USES = 8;
+const SHIPPED_OTHER_END_MAX_USES = 6;
 /* The refs block of the credential store is the only place a stored key can be observed at all. */
 const credentialRefsOf = (text) => {
   const marker = text.lastIndexOf("\nrefs:");
@@ -100,6 +148,10 @@ const EVIDENCE_DIR = argValue("--evidence", join(process.cwd(), "evidence"));
 const KEEP = args.includes("--keep");
 if (MODE !== "control" && MODE !== "overlay") throw new Error("--mode must be control or overlay");
 
+/* The profile this run creates inside its OWN throwaway home. DSH_PROFILE names it (the documented invocation
+   passes DSH_PROFILE=e2e); the default is a name of its own. Every reference to the profile - its directory, the
+   instance booted on it, the terminal entry point that installs into it - uses this one name. */
+const PROFILE = process.env.DSH_PROFILE || "e2e";
 const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok: ok === true, detail }); console.log((ok === true ? "PASS " : "FAIL ") + name + (detail === undefined ? "" : " :: " + detail)); return ok === true; };
 const evidence = { mode: MODE, dshBin: DSH_BIN, dshInstall: DSH_INSTALL, chromium: CHROMIUM, testHost: TEST_HOST, checks: results, files: {} };
@@ -667,6 +719,124 @@ async function clearText(cdp, focusExpression, presses = 48) {
   await sleep(250);
 }
 
+/* ------------------------------------------------------------------------------------------------------
+   The page-side driver for the ORIGINAL Plugins page (issue #5). Like the provider driver above it is a thin
+   wrapper around the page's own DOM - it clicks the page's own buttons, focuses the page's own inputs and
+   reads back what the page itself rendered - and it knows NOTHING about persistence or about the plugin it is
+   pointed at. It is deliberately generic: a bundle is addressed by its PACKAGE NAME, a field by the ID THE
+   BUNDLE CHOSE, and a switch by its own aria-label, so nothing here names the fixture's page. Two page facts
+   shape it:
+     * The onboarding dialogs come up over the app, and while one is up the app shell is inert: focus() is
+       ignored, so typing through the browser's own input pipeline would reach whatever field still holds
+       focus. They are dismissed first, one round at a time, until nothing is in the way.
+     * Opening a bundle's card replaces the plugin list with that bundle's detail view, so the cards are read
+       while they are still on screen, before any card is opened.
+   ------------------------------------------------------------------------------------------------------ */
+const PLUGIN_PAGE_DRIVER = [
+  "(function () {",
+  "  var list = function (selector, root) { return Array.prototype.slice.call((root || document).querySelectorAll(selector)); };",
+  "  var visible = function (element) { return !!element && element.getClientRects().length > 0; };",
+  "  var shown = function (selector, root) { return list(selector, root).filter(visible); };",
+  "  var trimmed = function (value) { return (value || \"\").replace(/\\s+/g, \" \").trim(); };",
+  "  var dialogs = function () { return shown(\"[role=dialog]\"); };",
+  "  var buttonNamed = function (text, root) { return shown(\"button\", root).filter(function (button) { return trimmed(button.innerText) === text; })[0]; };",
+  "  var configSection = function () { return document.querySelector(\"[data-plugin-config]\"); };",
+  "  var saveButton = function () {",
+  "    return shown(\"button\", configSection() || document).filter(function (button) { return /^save/i.test(trimmed(button.innerText)); })[0];",
+  "  };",
+  "  var api = {",
+  "    blockers: function () {",
+  "      var root = document.getElementById(\"root\");",
+  "      return { count: dialogs().length, titles: dialogs().map(function (dialog) { return trimmed(dialog.innerText).slice(0, 60); }), rootInert: !!root && root.hasAttribute(\"inert\") };",
+  "    },",
+  "    dismiss: function () {",
+  "      /* One round: the topmost dialog and, inside it, the one action a person would take. The card can come",
+  "         back over the page, so the caller repeats this until nothing is in the way. */",
+  "      var scope = dialogs().pop();",
+  "      if (!scope) return \"none\";",
+  "      var button = buttonNamed(\"Continue\", scope) || buttonNamed(\"Configure later\", scope) || null;",
+  "      if (button === null) return \"no-action\";",
+  "      var text = trimmed(button.innerText);",
+  "      button.click();",
+  "      return \"clicked \" + text;",
+  "    },",
+  "    openPlugins: function () {",
+  "      var button = shown(\"button\").filter(function (candidate) { return candidate.getAttribute(\"aria-label\") === \"Plugins\" || trimmed(candidate.innerText) === \"Plugins\"; })[0];",
+  "      if (!button) return \"no-nav\";",
+  "      button.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    cards: function () {",
+  "      return list(\"[data-plugin-package]\").map(function (node) { return { pkg: node.getAttribute(\"data-plugin-package\"), status: node.getAttribute(\"data-plugin-status\") }; });",
+  "    },",
+  "    openItem: function (label) {",
+  "      var button = shown(\"button\").filter(function (candidate) { return candidate.getAttribute(\"aria-label\") === \"View \" + label; })[0];",
+  "      if (!button) return \"no-card\";",
+  "      button.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    openBundle: function (pkg) { return api.openItem(pkg); },",
+  "    items: function () {",
+  "      return list(\"[data-plugin-item]\").map(function (node) { return trimmed(node.innerText).slice(0, 140); });",
+  "    },",
+  "    detail: function () {",
+  "      var section = configSection();",
+  "      var slot = document.querySelector(\"[data-slot=\\\"plugins.bundle.config\\\"]\");",
+  "      return {",
+  "        detailCount: list(\"[data-plugin-detail]\").length,",
+  "        configCount: list(\"[data-plugin-config]\").length,",
+  "        slotPresent: !!slot,",
+  "        slotHoldsForm: !!slot && list(\"input\", slot).length > 0,",
+  "        fieldIds: section === null ? [] : shown(\"input\", section).map(function (input) { return input.id; }).filter(function (id) { return id !== \"\"; }),",
+  "        buttons: section === null ? [] : shown(\"button\", section).map(function (button) { return trimmed(button.innerText); }).filter(function (text) { return text !== \"\"; }),",
+  "        switches: list(\"[role=switch]\").map(function (node) { return { label: node.getAttribute(\"aria-label\") || \"\", checked: node.getAttribute(\"aria-checked\"), disabled: node.disabled === true }; }),",
+  "        rows: list(\"[data-plugin-row]\").map(function (node) { return { row: node.getAttribute(\"data-plugin-row\"), state: node.getAttribute(\"data-state\") }; }),",
+  "        text: section === null ? \"\" : trimmed(section.innerText),",
+  "        body: trimmed(document.body.innerText).slice(0, 400)",
+  "      };",
+  "    },",
+  "    fields: function (ids) {",
+  "      return ids.map(function (id) {",
+  "        var input = document.getElementById(id);",
+  "        var message = document.getElementById(id + \"-message\");",
+  "        return { id: id, present: !!input, value: input === null ? null : input.value, invalid: input === null ? null : input.getAttribute(\"aria-invalid\"), message: message === null ? null : trimmed(message.innerText) };",
+  "      });",
+  "    },",
+  "    paragraphs: function () {",
+  "      var section = configSection();",
+  "      return section === null ? [] : list(\"p\", section).map(function (paragraph) { return trimmed(paragraph.innerText); });",
+  "    },",
+  "    save: function () {",
+  "      var button = saveButton();",
+  "      return { present: !!button, text: button === undefined ? null : trimmed(button.innerText), disabled: button === undefined ? null : button.disabled };",
+  "    },",
+  "    clickSave: function () {",
+  "      var button = saveButton();",
+  "      if (button === undefined) return \"missing\";",
+  "      if (button.disabled) return \"disabled\";",
+  "      button.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    focusField: function (id) {",
+  "      var input = document.getElementById(id);",
+  "      if (!input) return \"missing\";",
+  "      input.focus();",
+  "      if (input.select && input.tagName !== \"SELECT\") input.select();",
+  "      return document.activeElement === input ? \"focused\" : \"blocked\";",
+  "    },",
+  "    clickSwitch: function (label) {",
+  "      var node = shown(\"[role=switch]\").filter(function (candidate) { return candidate.getAttribute(\"aria-label\") === label; })[0];",
+  "      if (!node) return \"missing\";",
+  "      node.click();",
+  "      return \"clicked\";",
+  "    },",
+  "    bodyText: function () { return trimmed(document.body.innerText); }",
+  "  };",
+  "  window.__e2ePlugins = api;",
+  "  return \"installed\";",
+  "})()",
+].join("\n");
+
 /* Opens the settings dialog and the ORIGINAL Models section on whatever document is loaded, and waits until the
    section settles. The onboarding card ("Add an API key to get started") is dismissed first: it is a dialog of its
    own, and while it is up it is the topmost dialog, so a reader that looks at the topmost dialog would see none of
@@ -716,15 +886,16 @@ async function openModelsSectionUnavailable(cdp, label) {
 async function main() {
   const root = await mkdtemp(join(tmpdir(), "dsh-e2e-" + MODE + "-"));
   const home = join(root, "home");
-  const profileDir = join(home, "profiles", "proto");
+  const profileDir = join(home, "profiles", PROFILE);
   await mkdir(profileDir, { recursive: true });
   await writeFile(join(profileDir, "cordis.patch.yml"), "[]\n");
   await writeFile(join(profileDir, "pnpm-workspace.yaml"), "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n");
   /* Both modes start from the composition a real instance carries, so the overlay gate has something to
      replace and the rollback has something to restore. */
   const bundles = ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"];
-  await writeFile(join(profileDir, "package.json"), JSON.stringify({ name: "dsh-profile-proto", private: true, dependencies: {}, dsh: { profile: { bundles } } }, null, 2) + "\n");
+  await writeFile(join(profileDir, "package.json"), JSON.stringify({ name: "dsh-profile-" + PROFILE, private: true, dependencies: {}, dsh: { profile: { bundles } } }, null, 2) + "\n");
   evidence.root = root;
+  evidence.profile = PROFILE;
   await mkdir(EVIDENCE_DIR, { recursive: true });
   /* The profile's own patch file, read in every stage: a refusal, a restart or a rollback must never change
      it except where the change is the point of the stage. */
@@ -790,7 +961,7 @@ async function main() {
     /* The gate runs inside the terminal entry point as well: pointed at an installation it must refuse, it
        has to leave the profile byte-for-byte as it was, so a failed preflight can never half-install. */
     const snapshotBeforeRefusal = await profileSnapshot(profileDir, patchPath);
-    const refusedEnable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", "proto", "--install", damagedCopy]);
+    const refusedEnable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", PROFILE, "--install", damagedCopy]);
     evidence.enableRefused = refusedEnable.output.trim().split("\n").slice(-4);
     check("the terminal entry point refuses to install or switch anything when the preflight fails", refusedEnable.code === 1 && /refusing to install or switch anything/.test(refusedEnable.output), refusedEnable.output.trim().split("\n").slice(-2).join(" | "));
     check("a refused enable leaves the profile exactly as it was (no half install, no switch, no state file)", (await profileSnapshot(profileDir, patchPath)) === snapshotBeforeRefusal, "profile state unchanged");
@@ -800,7 +971,7 @@ async function main() {
     const seededOverride = '- id: ui-settings\n  name: "@deepseek-ai/dsh-client-ui-settings"\n  config:\n    enabled: true\n';
     await writeFile(patchPath, seededOverride);
     evidence.files.profilePatchSeeded = seededOverride;
-    const enable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", "proto", "--install", DSH_INSTALL, "--dsh-bin", DSH_BIN, "--artifacts", join(root, "artifacts")]);
+    const enable = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", PROFILE, "--install", DSH_INSTALL, "--dsh-bin", DSH_BIN, "--artifacts", join(root, "artifacts")]);
     evidence.enableOutput = enable.output.trim().split("\n").slice(-8);
     check("the documented enable runs the preflight and then installs the artifacts itself", enable.code === 0 && /provenance verification PASSED/.test(enable.output) && /switched dsh\.profile\.bundles/.test(enable.output), enable.output.trim().split("\n").slice(-3).join(" | "));
     const artifactNames = await readdir(join(root, "artifacts"));
@@ -832,7 +1003,7 @@ async function main() {
     check("CONTROL: exactly one ui-settings provider row, served by the upstream package", controlRows.length === 1 && controlRows[0].provider === "@deepseek-ai/dsh-client-ui-settings", JSON.stringify(controlRows));
   }
 
-  let instance = await startInstance(home, "proto");
+  let instance = await startInstance(home, PROFILE);
   const parsed = new URL(instance.url);
   const remoteUrl = "http://" + TEST_HOST + ":" + parsed.port + "/" + parsed.search;
   evidence.urls = { loopback: instance.url, remote: remoteUrl };
@@ -1035,6 +1206,16 @@ async function main() {
     if (event.method === "Log.entryAdded") { const target = isStreamTarget(event.url) ? event.url : quotedUrl(event.params.entry.text); return isStreamTarget(target) && /net::ERR_INTERNET_DISCONNECTED/.test(String(event.params.entry.text)); }
     return false;
   };
+  /* A request the browser itself cancelled is not a failure of the page: when the harness navigates or reloads
+     the document, whatever was still in flight is aborted and reported as canceled. The flag is the browser's
+     own structural statement, it is accepted only in the stages where the harness was the one disrupting the
+     page (never on the initial load), and streams are excluded so this can never excuse a broken transport. */
+  const isCancelledInFlightRequest = (event) => {
+    if (event.method !== "Network.loadingFailed") return "";
+    if (event.params.canceled !== true) return "";
+    if (isStreamTarget(event.url)) return "";
+    return "the browser cancelled a request that was still in flight when the harness reloaded or navigated the page";
+  };
   const assertNoStageErrors = (stage, allowStreamTeardown, inducedOfflineUrl, expectInducedTransport, inducedArtifactPatterns) => {
     const events = stageEvents();
     const discontinuedInStage = discontinued;
@@ -1047,7 +1228,7 @@ async function main() {
     const tolerated = [];
     if (allowStreamTeardown) {
       for (const event of events) {
-        const reason = isDiscontinuedTeardown(event, discontinuedInStage) || isDisruptedStreamFailure(event, discontinuedInStage);
+        const reason = isDiscontinuedTeardown(event, discontinuedInStage) || isDisruptedStreamFailure(event, discontinuedInStage) || isCancelledInFlightRequest(event);
         if (reason !== "") tolerated.push({ event, reason });
       }
       for (const event of events) {
@@ -1675,7 +1856,7 @@ async function main() {
   discontinue("instance restart");
   instance.child.kill("SIGTERM");
   await sleep(3000);
-  instance = await startInstance(home, "proto");
+  instance = await startInstance(home, PROFILE);
   const restarted = new URL(instance.url);
   const remoteUrl2 = "http://" + TEST_HOST + ":" + restarted.port + "/" + restarted.search;
   evidence.urls.remoteAfterRestart = remoteUrl2;
@@ -1735,7 +1916,7 @@ async function main() {
        DSH_INSTALL deliberately points at the APPROVED installation while this unapproved copy runs: the gate
        must follow the script the process actually runs, so an environment variable cannot mask a tampered
        build (a compatibility-style exemption is exactly what must not bypass the check). */
-    const damagedInstance = await startInstance(home, "proto", join(damagedCopy, "lib/bin.js"), { DSH_INSTALL: DSH_INSTALL });
+    const damagedInstance = await startInstance(home, PROFILE, join(damagedCopy, "lib/bin.js"), { DSH_INSTALL: DSH_INSTALL });
     evidence.damagedInstanceEnv = { DSH_INSTALL: DSH_INSTALL, argv1: join(damagedCopy, "lib/bin.js") };
     evidence.damagedInstanceUrl = damagedInstance.url;
     await sleep(4000);
@@ -1748,7 +1929,7 @@ async function main() {
     evidence.damagedWrite = damagedWrite;
     check("a settings write against the unverified build is rejected instead of reported as saved", damagedWrite.ok === false && Boolean(damagedWrite.error) && damagedWrite.error.code === "settings/rejected", JSON.stringify(damagedWrite).slice(0, 300));
     check("the rejected write left the saved override untouched", (await readPatch()) === evidence.files.profilePatchAfterRestart, "patch unchanged");
-    const damagedDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", damagedCopy]);
+    const damagedDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", PROFILE, "--install", damagedCopy]);
     evidence.diagnoseDamagedInstall = damagedDiagnose.output.trim().split("\n").slice(-6);
     check("the terminal diagnose refuses the same unverified build the instance refused", damagedDiagnose.code === 1 && /installed build differs from the recorded build identity/.test(damagedDiagnose.output), evidence.diagnoseDamagedInstall.join(" | ").slice(0, 320));
     damagedInstance.child.kill("SIGTERM");
@@ -1770,7 +1951,7 @@ async function main() {
     const damagedText = pristineText.replace(damagePoint, damagePoint + "\n\t\t\tthrow new Error(\"DSH_E2E_DAMAGED_BROWSER_ARTIFACT\");");
     check("the harness really changed the packed browser artifact (not a no-op write)", damagedText !== pristineText && damagedText.includes("DSH_E2E_DAMAGED_BROWSER_ARTIFACT"), "throw injected into " + damagePoint);
     await replaceFile(installedClientPath, damagedText);
-    const artifactDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", DSH_INSTALL]);
+    const artifactDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", PROFILE, "--install", DSH_INSTALL]);
     evidence.diagnoseDamagedArtifact = artifactDiagnose.output.trim().split("\n").slice(-6);
     check("the terminal diagnose names the damaged browser artifact instead of calling the profile healthy", artifactDiagnose.code === 1 && /lib\/client\.js as installed in the profile/.test(artifactDiagnose.output), evidence.diagnoseDamagedArtifact.join(" | ").slice(0, 320));
     discontinue("damaged artifact reload");
@@ -1802,7 +1983,7 @@ async function main() {
     await replaceFile(installedClientPath, clientBytes);
     const restoredBytes = await readFile(installedClientPath);
     check("the browser artifact was restored byte for byte", restoredBytes.equals(clientBytes) && createHash("sha256").update(restoredBytes).digest("hex") === clientSha, "sha256 " + clientSha.slice(0, 16));
-    const restoredDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", "proto", "--install", DSH_INSTALL]);
+    const restoredDiagnose = runTool(OVERLAY_TOOL, ["diagnose", "--home", home, "--profile", PROFILE, "--install", DSH_INSTALL]);
     check("the terminal diagnose is clean again once the artifact is restored", restoredDiagnose.code === 0, restoredDiagnose.output.trim().split("\n").slice(-1)[0]);
     discontinue("artifact restore reload");
     await cdp.send("Network.clearBrowserCache").catch(() => {});
@@ -1845,11 +2026,11 @@ async function main() {
     await writeFile(join(unrelatedDir, "package.json"), JSON.stringify({ name: UNRELATED_LAYER, version: "0.0.0", private: true, dsh: { bundle: { patch: ["./cordis.patch.yml"] } } }, null, 2) + "\n");
     await writeFile(join(unrelatedDir, "cordis.patch.yml"), "[]\n");
     const unrelatedPack = execFileSync("npm", ["pack", "--pack-destination", join(root, "artifacts"), "--silent"], { cwd: unrelatedDir, encoding: "utf8" }).trim().split("\n").pop();
-    execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", "proto", "add", join(root, "artifacts", unrelatedPack)], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8" });
+    execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", PROFILE, "add", join(root, "artifacts", unrelatedPack)], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8" });
     const bundlesWithUnrelated = (await readJson(join(profileDir, "package.json"))).dsh.profile.bundles;
     evidence.bundlesWithUnrelatedLayer = bundlesWithUnrelated;
     check("the harness added an unrelated bundle layer while the replacement was active", bundlesWithUnrelated.includes(UNRELATED_LAYER) && bundlesWithUnrelated.includes(OVERLAY_SCOPE + "/web-composition"), JSON.stringify(bundlesWithUnrelated));
-    const rollback = runTool(OVERLAY_TOOL, ["rollback", "--home", home, "--profile", "proto"]);
+    const rollback = runTool(OVERLAY_TOOL, ["rollback", "--home", home, "--profile", PROFILE]);
     evidence.rollbackOutput = rollback.output.trim().split("\n");
     check("the documented terminal rollback succeeds", rollback.code === 0, evidence.rollbackOutput.slice(-3).join(" | ").slice(0, 320));
     const patchAfterRollback = await readPatch();
@@ -1868,7 +2049,7 @@ async function main() {
     discontinue("instance restart");
     instance.child.kill("SIGTERM");
     await sleep(3000);
-    instance = await startInstance(home, "proto");
+    instance = await startInstance(home, PROFILE);
     const rolled = new URL(instance.url);
     const remoteUrl3 = "http://" + TEST_HOST + ":" + rolled.port + "/" + rolled.search;
     evidence.urls.remoteAfterRollback = remoteUrl3;
@@ -1930,7 +2111,569 @@ async function main() {
     assertNoStageErrors("afterRollback", true);
   }
 
-  /* Nothing disruptive happens between the last stage and this point, so the final stage tolerates nothing. */
+  /* =====================================================================================================
+     Issue #5: the ORIGINAL Plugins page, on the REMOTE origin, driving a THIRD-PARTY plugin.
+
+     Everything above this point ships with the deployment. This stage installs a probe bundle through the
+     documented package-manager path and then drives the page's own plugin manager with it. What has to hold:
+     the bundle's configuration form is mounted by the page's STANDARD slot and filled with what the instance
+     serves; a staged edit reaches nothing; a save lands on the instance and in the profile; a namespace a
+     second access end has moved on is refused while the draft survives; the field's own validation and the
+     deployment's own refusals are never reported as success; and the plugin's switches really take it away and
+     bring it back. None of that may depend on this repository knowing the plugin: the driver addresses the
+     bundle by its package name and its fields by the ids the bundle itself chose, and the composition that is
+     installed here mentions the probe nowhere.
+     ===================================================================================================== */
+  const probeSource = join(REPO_ROOT, "tools", "fixtures", "dsh-config-probe");
+  const probeManifest = await readJson(join(probeSource, "package.json"));
+  /* Installed the way a user installs a plugin: packed out of its own directory and handed to the documented
+     CLI, which forwards to the profile's package manager. */
+  /* The pack destination is created first: only the overlay stages build into it, so in control mode this
+     directory would not exist at all and packing the fixture would fail before a single check ran. */
+  await mkdir(join(root, "artifacts"), { recursive: true });
+  const probeTarball = execFileSync("npm", ["pack", "--pack-destination", join(root, "artifacts"), "--silent"], { cwd: probeSource, encoding: "utf8" }).trim().split("\n").pop();
+  execFileSync(process.execPath, [DSH_BIN, "plugin", "--profile", PROFILE, "add", join(root, "artifacts", probeTarball)], { env: { ...process.env, DSH_HOME: home }, encoding: "utf8" });
+  const manifestWithProbe = await readJson(join(profileDir, "package.json"));
+  const probeEvidence = {};
+  evidence.probePlugin = probeEvidence;
+  probeEvidence.install = {
+    tarball: probeTarball,
+    dependency: manifestWithProbe.dependencies[PROBE_PACKAGE],
+    bundles: manifestWithProbe.dsh.profile.bundles,
+    peerDependencies: probeManifest.peerDependencies === undefined ? null : probeManifest.peerDependencies,
+    clientPlatform: probeManifest.dsh && probeManifest.dsh.client ? probeManifest.dsh.client.platform : null,
+  };
+  check("a third-party bundle joins the profile's bundle list through the documented package-manager path", manifestWithProbe.dsh.profile.bundles.includes(PROBE_PACKAGE), JSON.stringify(manifestWithProbe.dsh.profile.bundles));
+  check("the probe is an ordinary third-party package: a tarball dependency, and no framework dependency of its own", String(manifestWithProbe.dependencies[PROBE_PACKAGE] || "").indexOf("file:") === 0 && probeManifest.peerDependencies === undefined, JSON.stringify(probeEvidence.install));
+
+  if (MODE === "overlay") {
+    /* The replacement was rolled back above, so the documented enable runs again on that same profile. */
+    const reEnabled = runTool(OVERLAY_TOOL, ["enable", "--home", home, "--profile", PROFILE, "--install", DSH_INSTALL, "--dsh-bin", DSH_BIN, "--artifacts", join(root, "artifacts")]);
+    probeEvidence.reEnable = reEnabled.output.trim().split("\n").slice(-4);
+    check("the documented enable runs again on the rolled-back profile and switches the composition back", reEnabled.code === 0 && /switched dsh\.profile\.bundles/.test(reEnabled.output), probeEvidence.reEnable.slice(-2).join(" | ").slice(0, 320));
+  }
+
+  /* The bundle list is read when an instance starts, so the new layer needs a fresh process - the same restart
+     every other installed layer in this suite goes through. Everything below is read on the REMOTE origin. */
+  discontinue("instance restart");
+  instance.child.kill("SIGTERM");
+  await sleep(3000);
+  instance = await startInstance(home, PROFILE);
+  const withProbe = new URL(instance.url);
+  const remoteUrl4 = "http://" + TEST_HOST + ":" + withProbe.port + "/" + withProbe.search;
+  evidence.urls.remoteWithProbePlugin = remoteUrl4;
+  await navigate(remoteUrl4);
+  await waitFor(cdp, SHELL_PROBE, "app shell on the remote origin with the third-party plugin installed", 60000);
+
+  /* Re-derived after every restart below: a fresh instance listens on a fresh port. */
+  let remoteRpc = rpcFor(instance.url);
+  /* The page's OWN calls, read out of the CDP network log by shape, so the harness never has to trust the
+     page's account of what it did. Settings writes are filtered by NAMESPACE as well: the page writes
+     namespaces of its own in the same window (the onboarding notice, for one), and those belong to no stage. */
+  const probeRequestMark = () => (cdp.requests.length === 0 ? 0 : cdp.requests[cdp.requests.length - 1].seq);
+  const pageCalls = (since, method, ns) => pageRpcCallsSince(since).filter((call) => call.method === method && call.args !== undefined && (method !== "settings/mutate" || ns === undefined || call.args.ns === ns));
+  const probeCalls = (since, method) => pageCalls(since, method, PROBE_NS);
+  /* What the instance serves for one namespace, read through the same public RPC the page uses. */
+  const servedNamespace = async (ns) => {
+    const described = await remoteRpc("settings/describe", {});
+    if (described.ok !== true) throw new Error("the instance refused settings/describe: " + JSON.stringify(described).slice(0, 300));
+    const entry = described.value.namespaces.filter((item) => item.ns === ns)[0];
+    /* The namespace entries themselves carry no writability flag: the describe answer states it once for the
+       whole document, and every namespace it lists comes from that same editable document. */
+    return entry === undefined ? null : { ns: entry.ns, revision: entry.revision, value: entry.value, user: entry.user, writable: described.value.writable === true };
+  };
+  const servedProbe = async () => await servedNamespace(PROBE_NS);
+  /* settings/describe reads the profile's overlay, so while the harness is deliberately holding a broken write
+     target the host cannot describe anything at all: that refusal is part of this stage's evidence, not a crash. */
+  const tryServedNamespace = async (ns) => {
+    try {
+      return { state: await servedNamespace(ns), error: null };
+    } catch (error) {
+      return { state: null, error: String((error && error.message) || error) };
+    }
+  };
+  const pageFields = async (ids) => JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.fields(" + JSON.stringify(ids) + "))"));
+  const fieldOf = (fields, id) => fields.filter((field) => field.id === id)[0] || { id: id, present: false, value: null, invalid: null, message: null };
+  const probeFields = async () => await pageFields([PROBE_LABEL_FIELD, PROBE_ATTEMPTS_FIELD]);
+  const pageSave = async () => JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.save())"));
+  const pageParagraphs = async () => JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.paragraphs())"));
+  /* Brings whatever document is loaded to an interactive state and installs the page driver. The onboarding
+     dialogs are dismissed first, one round at a time: while one is up the app shell is inert, focus is ignored
+     and typing would land in whatever field still held focus. */
+  const settlePage = async (label) => {
+    await waitFor(cdp, SHELL_PROBE, "app shell (" + label + ")");
+    await cdp.eval(PLUGIN_PAGE_DRIVER);
+    const blockers = [];
+    for (let round = 0; round < 6; round += 1) {
+      const state = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.blockers())"));
+      blockers.push(state);
+      if (state.count === 0) break;
+      blockers.push({ dismissed: await cdp.eval("window.__e2ePlugins.dismiss()") });
+      await sleep(1500);
+    }
+    const settled = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.blockers())"));
+    if (settled.count !== 0 || settled.rootInert === true) throw new Error("the page never became interactive (" + label + "): " + JSON.stringify(settled));
+    return blockers;
+  };
+  /* Opens one card of the ORIGINAL plugin page's list and returns what that list held as it opened. Both callers
+     do the same four things - open the app, wait for their entry to be listed, read the list, open the card - and
+     differ only in the entry they look for. */
+  const openCardInList = async (label, spec) => {
+    const navigated = await cdp.eval("window.__e2ePlugins.openPlugins()");
+    if (navigated !== "clicked") throw new Error("the plugin manager could not be opened (" + label + "): " + navigated);
+    await waitForValue(cdp, spec.wait, spec.waitLabel + " (" + label + ")", 30000);
+    const listed = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins." + spec.list + "())"));
+    const opened = await cdp.eval("window.__e2ePlugins." + spec.open + "(" + JSON.stringify(spec.key) + ")");
+    if (opened !== "clicked") throw new Error(spec.card + " could not be opened (" + label + "): " + opened);
+    return listed;
+  };
+  /* Opens the plugin manager on whatever document is loaded, opens the bundle's own card and waits for the form
+     the bundle registers. */
+  const openPluginPage = async (label, expectForm) => {
+    const blockers = await settlePage(label);
+    const cards = await openCardInList(label, {
+      wait: "window.__e2ePlugins.cards().some(function (card) { return card.pkg === " + JSON.stringify(PROBE_PACKAGE) + "; })",
+      waitLabel: "the installed bundle's card",
+      list: "cards",
+      open: "openBundle",
+      key: PROBE_PACKAGE,
+      card: "the bundle's card",
+    });
+    if (expectForm === true) await waitForValue(cdp, "window.__e2ePlugins.detail().fieldIds.indexOf(" + JSON.stringify(PROBE_LABEL_FIELD) + ") !== -1", "the bundle's configuration form (" + label + ")", 30000);
+    else await sleep(2500);
+    await sleep(500);
+    return { blockers: blockers, cards: cards, detail: JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.detail())")) };
+  };
+  /* The same plugin list also carries the pages the DEPLOYMENT ships: its own packages register them in the
+     very same slot, so this driver reaches them keyed by the page's own title, with no knowledge of the probe. */
+  const openItemPage = async (label, itemLabel, fieldId) => {
+    const blockers = await settlePage(label);
+    const items = await openCardInList(label, {
+      wait: "window.__e2ePlugins.items().some(function (text) { return text.indexOf(" + JSON.stringify(itemLabel) + ") !== -1; })",
+      waitLabel: "the deployment's own page in the list",
+      list: "items",
+      open: "openItem",
+      key: itemLabel,
+      card: "the page's own card",
+    });
+    await waitForValue(cdp, "window.__e2ePlugins.detail().fieldIds.indexOf(" + JSON.stringify(fieldId) + ") !== -1", "the deployment's own form (" + label + ")", 30000);
+    await sleep(500);
+    return { blockers: blockers, items: items, detail: JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.detail())")) };
+  };
+
+  if (MODE === "overlay") {
+    const hostAtOpen = await servedProbe();
+    const opened = await openPluginPage("first open", true);
+    probeEvidence.opened = opened;
+    probeEvidence.hostAtOpen = hostAtOpen;
+    check("the plugin manager lists the installed third-party bundle as running on the remote origin", opened.cards.some((card) => card.pkg === PROBE_PACKAGE && card.status === "running"), JSON.stringify(opened.cards));
+    check("the instance serves the third-party plugin's namespace with the bundle's own defaults", hostAtOpen !== null && hostAtOpen.writable === true && hostAtOpen.revision === 0 && hostAtOpen.value.label === PROBE_DEFAULT_LABEL && hostAtOpen.value.attempts === PROBE_DEFAULT_ATTEMPTS, JSON.stringify(hostAtOpen));
+    check("the plugin's form is mounted by the page's STANDARD configuration slot, keyed by the bundle's own name", opened.detail.detailCount === 1 && opened.detail.configCount === 1 && opened.detail.slotPresent === true && opened.detail.slotHoldsForm === true, JSON.stringify(opened.detail).slice(0, 400));
+    check("the form renders the fields the bundle declares, under the ids the bundle itself chose", opened.detail.fieldIds.indexOf(PROBE_LABEL_FIELD) !== -1 && opened.detail.fieldIds.indexOf(PROBE_ATTEMPTS_FIELD) !== -1, JSON.stringify(opened.detail.fieldIds));
+    const fieldsAtOpen = await probeFields();
+    const saveAtOpen = await pageSave();
+    const paragraphsAtOpen = await pageParagraphs();
+    probeEvidence.formAtOpen = { fields: fieldsAtOpen, save: saveAtOpen, paragraphs: paragraphsAtOpen };
+    check("the page reads the plugin's configuration from the instance, not from anything of its own", fieldOf(fieldsAtOpen, PROBE_LABEL_FIELD).value === hostAtOpen.value.label && fieldOf(fieldsAtOpen, PROBE_ATTEMPTS_FIELD).value === String(hostAtOpen.value.attempts), JSON.stringify({ page: fieldsAtOpen, host: hostAtOpen.value }));
+    check("the form carries the bundle's own copy and opens with nothing to save", paragraphsAtOpen.indexOf(PROBE_COPY.labelHint) !== -1 && paragraphsAtOpen.indexOf(PROBE_COPY.attemptsHint) !== -1 && saveAtOpen.text === PROBE_COPY.save && saveAtOpen.disabled === true, JSON.stringify({ save: saveAtOpen, paragraphs: paragraphsAtOpen }));
+    const forkSource = await readFile(join(REPO_ROOT, "packages", "dsh-client-ui-settings", "lib", "client.js"), "utf8");
+    const compositionSource = await readFile(join(REPO_ROOT, "packages", "dsh-web-composition", "cordis.patch.yml"), "utf8");
+    const bespokeMentions = [PROBE_PACKAGE, PROBE_NS, PROBE_COPY.title].filter((needle) => (forkSource + compositionSource).indexOf(needle) !== -1);
+    probeEvidence.bespokeMentions = bespokeMentions;
+    check("the replacement knows nothing about this plugin: neither its name, nor its namespace, nor its copy appears in the fork or its composition", bespokeMentions.length === 0, JSON.stringify(bespokeMentions));
+    await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-15-plugin-page.png"));
+    assertLiveTransport("afterPluginPageOpen");
+    assertNoStageErrors("afterPluginPageOpen", true);
+
+    /* Staged edit: it must show in the page, and it must reach nothing else - not the instance's value, not
+       its revision, not the profile - with no write of any kind leaving the page. */
+    const patchBeforeDraft = await readPatch();
+    const markBeforeDraft = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(PROBE_LABEL_FIELD) + ")", PROBE_DRAFT);
+    await sleep(900);
+    const fieldsStaged = await probeFields();
+    const saveStaged = await pageSave();
+    const hostAfterDraft = await servedProbe();
+    const patchAfterDraft = await readPatch();
+    const draftWrites = probeCalls(markBeforeDraft, "settings/mutate");
+    probeEvidence.stagedDraft = { fields: fieldsStaged, save: saveStaged, host: hostAfterDraft, writes: draftWrites };
+    check("the page holds the staged draft and offers to save it", fieldOf(fieldsStaged, PROBE_LABEL_FIELD).value === PROBE_DRAFT && saveStaged.disabled === false, JSON.stringify({ fields: fieldsStaged, save: saveStaged }));
+    check("staging an edit reaches nothing: the instance still reports the stored value at the stored revision", hostAfterDraft.revision === hostAtOpen.revision && hostAfterDraft.value.label === hostAtOpen.value.label && hostAfterDraft.value.attempts === hostAtOpen.value.attempts, JSON.stringify({ before: hostAtOpen, after: hostAfterDraft }));
+    check("staging an edit sends no write for the plugin's namespace", draftWrites.length === 0, JSON.stringify(draftWrites));
+    check("staging an edit leaves the profile's patch file byte-identical", patchAfterDraft === patchBeforeDraft, patchAfterDraft.replace(/\n/g, " | ").slice(0, 240));
+
+    /* Saved edit: the page's own action starts the write, the value lands on the instance and in the profile. */
+    const markBeforeSave = probeRequestMark();
+    const saveClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    check("the page's own save action is what starts the write", saveClick === "clicked", String(saveClick));
+    await waitForValue(cdp, "window.__e2ePlugins.save().disabled === true", "the page's save action to settle back to its clean state", 25000);
+    const saveWrites = probeCalls(markBeforeSave, "settings/mutate");
+    const hostAfterSave = await servedProbe();
+    const patchAfterSave = await readPatch();
+    probeEvidence.savedDraft = { writes: saveWrites, host: hostAfterSave, patchRow: patchRow(patchAfterSave, PROBE_NS) };
+    check("the page's own write names the plugin's namespace, the field it staged and the revision it had read", saveWrites.length === 1 && JSON.stringify(saveWrites[0].args.ops) === JSON.stringify([{ op: "set", path: ["label"], value: PROBE_DRAFT }]) && saveWrites[0].args.expectedRevision === hostAtOpen.revision, JSON.stringify(saveWrites));
+    check("the saved value lands on the instance as exactly one new revision", hostAfterSave.revision === hostAtOpen.revision + 1 && hostAfterSave.value.label === PROBE_DRAFT && hostAfterSave.value.attempts === hostAtOpen.value.attempts, JSON.stringify({ before: hostAtOpen, after: hostAfterSave }));
+    check("the saved value lands in the profile's patch file, on the plugin's own row", patchRow(patchAfterSave, PROBE_NS).indexOf("id: " + PROBE_NS) !== -1 && patchRow(patchAfterSave, PROBE_NS).indexOf(PROBE_PACKAGE) !== -1 && patchRow(patchAfterSave, PROBE_NS).indexOf(PROBE_DRAFT) !== -1, patchRow(patchAfterSave, PROBE_NS).replace(/\n/g, " | ").slice(0, 240));
+
+    /* A full reload proves the value came from the instance and not from anything the page held in memory. */
+    await navigate(remoteUrl4);
+    const reopened = await openPluginPage("after the refresh", true);
+    const fieldsAfterReload = await probeFields();
+    const saveAfterReload = await pageSave();
+    const hostAfterReload = await servedProbe();
+    probeEvidence.afterReload = { cards: reopened.cards, fields: fieldsAfterReload, save: saveAfterReload, host: hostAfterReload };
+    check("after a full page load the form shows the saved value and has nothing left to save", fieldOf(fieldsAfterReload, PROBE_LABEL_FIELD).value === PROBE_DRAFT && fieldOf(fieldsAfterReload, PROBE_ATTEMPTS_FIELD).value === String(hostAfterSave.value.attempts) && saveAfterReload.disabled === true, JSON.stringify({ fields: fieldsAfterReload, save: saveAfterReload }));
+    check("the value survives the reload because the instance serves it, not because the page remembered it", hostAfterReload.revision === hostAfterSave.revision && hostAfterReload.value.label === PROBE_DRAFT, JSON.stringify(hostAfterReload));
+
+    /* Input the field cannot parse: the field itself reports it, and nothing is sent. */
+    const markBeforeInvalid = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(PROBE_ATTEMPTS_FIELD) + ")", PROBE_UNPARSEABLE);
+    await sleep(900);
+    const fieldsInvalid = await probeFields();
+    const saveInvalid = await pageSave();
+    const invalidWrites = probeCalls(markBeforeInvalid, "settings/mutate");
+    probeEvidence.invalidInput = { fields: fieldsInvalid, save: saveInvalid, writes: invalidWrites };
+    check("a value the field cannot parse is reported by the field itself, in the bundle's own words", fieldOf(fieldsInvalid, PROBE_ATTEMPTS_FIELD).invalid === "true" && fieldOf(fieldsInvalid, PROBE_ATTEMPTS_FIELD).message === PROBE_COPY.invalidNumber, JSON.stringify(fieldsInvalid));
+    check("a value the field cannot parse is never sent, and the page stops offering to save", invalidWrites.length === 0 && saveInvalid.disabled === true, JSON.stringify({ writes: invalidWrites, save: saveInvalid }));
+
+    /* Input the field accepts but the DEPLOYMENT refuses: the bundle's own schema bounds it. */
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(PROBE_ATTEMPTS_FIELD) + ")", String(PROBE_OUT_OF_RANGE));
+    await sleep(900);
+    const hostBeforeRefusal = await servedProbe();
+    const patchBeforeRefusal = await readPatch();
+    const markBeforeRefusal = probeRequestMark();
+    const refusalClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await waitForValue(cdp, "window.__e2ePlugins.paragraphs().indexOf(" + JSON.stringify(PROBE_COPY.saveFailed) + ") !== -1", "the deployment's refusal to be reported in the page", 25000);
+    const refusalWrites = probeCalls(markBeforeRefusal, "settings/mutate");
+    const fieldsRefused = await probeFields();
+    const saveRefused = await pageSave();
+    const hostAfterRefusal = await servedProbe();
+    const patchAfterRefusal = await readPatch();
+    probeEvidence.refusedValue = { writes: refusalWrites, fields: fieldsRefused, save: saveRefused, host: hostAfterRefusal, patchRow: patchRow(patchAfterRefusal, PROBE_NS) };
+    check("the page submits a value the deployment's own bounds reject", refusalClick === "clicked" && refusalWrites.length === 1 && JSON.stringify(refusalWrites[0].args.ops) === JSON.stringify([{ op: "set", path: ["attempts"], value: PROBE_OUT_OF_RANGE }]), JSON.stringify(refusalWrites));
+    check("a configuration the deployment refuses is reported as a failure, with the draft left in place", saveRefused.disabled === false && fieldOf(fieldsRefused, PROBE_ATTEMPTS_FIELD).value === String(PROBE_OUT_OF_RANGE), JSON.stringify({ save: saveRefused, fields: fieldsRefused }));
+    check("the refused configuration persists nothing on the instance", hostAfterRefusal.revision === hostBeforeRefusal.revision && hostAfterRefusal.value.attempts === hostBeforeRefusal.value.attempts && hostAfterRefusal.value.label === hostBeforeRefusal.value.label, JSON.stringify({ before: hostBeforeRefusal, after: hostAfterRefusal }));
+    check("the refused configuration persists nothing in the profile's patch file", patchAfterRefusal === patchBeforeRefusal, patchAfterRefusal.replace(/\n/g, " | ").slice(0, 240));
+
+    /* Two access ends: the harness plays the second one through the same public RPC the page uses. */
+    await navigate(remoteUrl4);
+    await openPluginPage("before the second access end writes", true);
+    const hostBeforeConflict = await servedProbe();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(PROBE_LABEL_FIELD) + ")", PROBE_CONFLICT_DRAFT);
+    await sleep(900);
+    const fieldsConflictDraft = await probeFields();
+    check("the page stages a draft and keeps the revision it read for it", fieldOf(fieldsConflictDraft, PROBE_LABEL_FIELD).value === PROBE_CONFLICT_DRAFT, JSON.stringify(fieldsConflictDraft));
+    const otherEndWrite = await remoteRpc("settings/mutate", { ns: PROBE_NS, ops: [{ op: "set", path: ["label"], value: PROBE_OTHER_END }], expectedRevision: hostBeforeConflict.revision });
+    const hostAfterOtherEnd = await servedProbe();
+    const patchAfterOtherEnd = await readPatch();
+    probeEvidence.otherEnd = { write: otherEndWrite, host: hostAfterOtherEnd, patchRow: patchRow(patchAfterOtherEnd, PROBE_NS) };
+    check("a second access end moves the plugin's namespace on while the page holds its draft", otherEndWrite.ok === true && hostAfterOtherEnd.revision === hostBeforeConflict.revision + 1 && hostAfterOtherEnd.value.label === PROBE_OTHER_END, JSON.stringify({ write: otherEndWrite, host: hostAfterOtherEnd }));
+    const markBeforeStaleSave = probeRequestMark();
+    const staleClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await waitForValue(cdp, "window.__e2ePlugins.paragraphs().indexOf(" + JSON.stringify(PROBE_COPY.saveFailed) + ") !== -1", "the stale save to be reported in the page", 25000);
+    const staleWrites = probeCalls(markBeforeStaleSave, "settings/mutate");
+    const fieldsAfterStale = await probeFields();
+    const saveAfterStale = await pageSave();
+    const paragraphsAfterStale = await pageParagraphs();
+    const hostAfterStale = await servedProbe();
+    const patchAfterStale = await readPatch();
+    probeEvidence.staleSave = { writes: staleWrites, fields: fieldsAfterStale, save: saveAfterStale, host: hostAfterStale, patchRow: patchRow(patchAfterStale, PROBE_NS) };
+    check("the page's stale save still carries the revision the draft was staged at, which the second end has moved past", staleClick === "clicked" && staleWrites.length === 1 && staleWrites[0].args.expectedRevision === hostBeforeConflict.revision && hostBeforeConflict.revision < hostAfterOtherEnd.revision, JSON.stringify(staleWrites));
+    check("the page reports the refusal in its own failure copy and still offers to save", paragraphsAfterStale.indexOf(PROBE_COPY.saveFailed) !== -1 && saveAfterStale.disabled === false, JSON.stringify({ save: saveAfterStale, paragraphs: paragraphsAfterStale }));
+    check("the refused save does not overwrite the newer value: the draft stays, and so does the other end's value", fieldOf(fieldsAfterStale, PROBE_LABEL_FIELD).value === PROBE_CONFLICT_DRAFT && hostAfterStale.revision === hostAfterOtherEnd.revision && hostAfterStale.value.label === PROBE_OTHER_END && patchAfterStale === patchAfterOtherEnd && patchRow(patchAfterStale, PROBE_NS).indexOf(PROBE_OTHER_END) !== -1, JSON.stringify({ fields: fieldsAfterStale, host: hostAfterStale, row: patchRow(patchAfterStale, PROBE_NS) }).slice(0, 400));
+    await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-16-plugin-refused.png"));
+    assertLiveTransport("afterPluginPageWrites");
+    assertNoStageErrors("afterPluginPageWrites", true);
+
+    /* A write that cannot land at all: the patch file is replaced by an unusable directory of the same name,
+       the same induced failure the provider page above is driven through. */
+    await navigate(remoteUrl4);
+    await openPluginPage("before the induced write failure", true);
+    const patchBackup = await readPatch();
+    const patchMode = (await stat(patchPath)).mode & 0o777;
+    const hostBeforeInduced = await servedProbe();
+    const failureErrors = cdp.errorEvents().length;
+    await rm(patchPath, { recursive: true, force: true });
+    await mkdir(patchPath, { recursive: true, mode: 0o700 });
+    const markBeforeInduced = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(PROBE_LABEL_FIELD) + ")", PROBE_FAILED_DRAFT);
+    await sleep(900);
+    const inducedClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await waitForValue(cdp, "window.__e2ePlugins.paragraphs().indexOf(" + JSON.stringify(PROBE_COPY.saveFailed) + ") !== -1", "the impossible write to be reported in the page", 25000);
+    const inducedWrites = probeCalls(markBeforeInduced, "settings/mutate");
+    const fieldsInduced = await probeFields();
+    const hostWhileInduced = await tryServedNamespace(PROBE_NS);
+    const targetStillDirectory = (await stat(patchPath)).isDirectory();
+    const targetEntries = targetStillDirectory ? await readdir(patchPath) : ["target was not a directory at all"];
+    const failureEvents = cdp.errorEvents().slice(failureErrors);
+    /* The failure text this window may account for. Deliberately narrow: a bare "patch" would excuse almost
+       anything a broken implementation could print, and the exemption has to be earned by an event, not assumed. */
+    const inducedWords = /failed to (read|write) patches|EISDIR|illegal operation on a directory|is a directory/i;
+    const inducedFailureEvents = failureEvents.filter((event) => inducedWords.test(String(event.text)));
+    const unrelatedFailureEvents = failureEvents.filter((event) => !inducedWords.test(String(event.text)));
+    probeEvidence.inducedFailure = { writes: inducedWrites, fields: fieldsInduced, hostBefore: hostBeforeInduced, hostWhileFailing: hostWhileInduced, targetStillDirectory: targetStillDirectory, targetEntries: targetEntries, inducedEvents: inducedFailureEvents.map((event) => ({ method: event.method, text: String(event.text).slice(0, 300) })) };
+    check("a configuration write that cannot land is reported in the page and leaves the draft open", inducedClick === "clicked" && inducedWrites.length === 1 && fieldOf(fieldsInduced, PROBE_LABEL_FIELD).value === PROBE_FAILED_DRAFT, JSON.stringify({ click: inducedClick, writes: inducedWrites, fields: fieldsInduced }));
+    check("while the write target is unusable the instance refuses to describe the namespace at all (it cannot read its own overlay)", hostWhileInduced.state === null && /EISDIR|illegal operation on a directory|is a directory/i.test(hostWhileInduced.error || ""), JSON.stringify({ whileFailing: hostWhileInduced }).slice(0, 400));
+    check("nothing was written anywhere: the target is still the unusable directory the harness made, and that directory is empty", targetStillDirectory === true && targetEntries.length === 0, JSON.stringify({ targetStillDirectory: targetStillDirectory, targetEntries: targetEntries }));
+    /* This window may hold the failure text it induced - and nothing else. Here the host refuses the write inside the response, so the page reports it without any runtime or network event at all; the exemption is therefore earned only when it is needed, and an empty window is a pass, not an excuse. */
+    check("the refusal is the page's own report of a real failed write, and the window invents no failure text of its own", unrelatedFailureEvents.length === 0 && (failureEvents.length === 0 || inducedFailureEvents.length > 0), JSON.stringify({ events: failureEvents.length, induced: inducedFailureEvents.map((event) => String(event.text).slice(0, 200)), unrelated: unrelatedFailureEvents.map((event) => String(event.text).slice(0, 200)) }).slice(0, 700));
+    await rm(patchPath, { recursive: true, force: true });
+    await writeFile(patchPath, patchBackup);
+    await chmod(patchPath, patchMode);
+    const patchAfterRestore = await readPatch();
+    const hostAfterInduced = await servedProbe();
+    probeEvidence.inducedFailure.hostAfter = hostAfterInduced;
+    check("the profile's patch file is restored byte-identically after the induced failure", patchAfterRestore === patchBackup, patchAfterRestore.replace(/\n/g, " | ").slice(0, 240));
+    check("the failed write left the instance's own value and revision exactly as they were, and never the draft", hostAfterInduced.revision === hostBeforeInduced.revision && JSON.stringify(hostAfterInduced.value) === JSON.stringify(hostBeforeInduced.value) && hostBeforeInduced.value.label !== PROBE_FAILED_DRAFT && patchAfterRestore.indexOf(PROBE_FAILED_DRAFT) === -1, JSON.stringify({ before: hostBeforeInduced.value, after: hostAfterInduced.value, revisions: [hostBeforeInduced.revision, hostAfterInduced.revision], draftInProfile: patchAfterRestore.indexOf(PROBE_FAILED_DRAFT) !== -1 }));
+    /* The failure above is expected evidence for that window alone: the stage's accounting starts after it. */
+    stageMark = cdp.errorEvents().length;
+
+    /* The plugin's switches, driven from the same page through the plugin manager's own calls. */
+    await navigate(remoteUrl4);
+    const reopenedForSwitches = await openPluginPage("before the enable/disable round trip", true);
+    const hostBeforeSwitches = await servedProbe();
+    const componentSwitch = "Enable component " + PROBE_PACKAGE;
+    const bundleSwitch = "Enable " + PROBE_PACKAGE;
+    probeEvidence.switchesBefore = { switches: reopenedForSwitches.detail.switches, rows: reopenedForSwitches.detail.rows };
+    check("the plugin's own component and its bundle are both listed with their own switches, both on", reopenedForSwitches.detail.switches.some((item) => item.label === componentSwitch && item.checked === "true") && reopenedForSwitches.detail.switches.some((item) => item.label === bundleSwitch && item.checked === "true"), JSON.stringify(reopenedForSwitches.detail.switches));
+
+    /* The page re-reads the plugin inventory after every toggle (the manager's own run-then-reload path), so a
+       toggle's visible effect lands a moment after its call does - and the switch is briefly unusable while its
+       own call is in flight, which would swallow a second click. Each step below therefore waits for the page to
+       report the new state, and for the switch to be usable again, before the next step is taken. */
+    const switchOf = (label) => "window.__e2ePlugins.detail().switches.filter(function (item) { return item.label === " + JSON.stringify(label) + "; })[0]";
+    const switchIdle = (label) => "(function (item) { return !!item && item.disabled === false; })(" + switchOf(label) + ")";
+    const switchReports = (label, checked) => "(function (item) { return !!item && item.checked === " + JSON.stringify(checked) + " && item.disabled === false; })(" + switchOf(label) + ")";
+
+    await waitForValue(cdp, switchIdle(componentSwitch), "the component switch to be usable", 25000);
+    const markBeforeDisable = probeRequestMark();
+    const disableClick = await cdp.eval("window.__e2ePlugins.clickSwitch(" + JSON.stringify(componentSwitch) + ")");
+    await waitForValue(cdp, switchReports(componentSwitch, "false"), "the page to report the plugin as off", 25000);
+    const disableCalls = probeCalls(markBeforeDisable, "pluginManager/setPluginEnabled");
+    const detailWhileDisabled = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.detail())"));
+    const hostWhileDisabled = await servedProbe();
+    const patchWhileDisabled = await readPatch();
+    probeEvidence.componentOff = { calls: disableCalls, switches: detailWhileDisabled.switches, rows: detailWhileDisabled.rows, host: hostWhileDisabled, patchRow: patchRow(patchWhileDisabled, PROBE_NS) };
+    check("switching the component off is the plugin manager's own call, keyed by the component's own id", disableClick === "clicked" && disableCalls.length === 1 && disableCalls[0].args.id === "include:" + PROBE_NS && disableCalls[0].args.enabled === false, JSON.stringify(disableCalls));
+    check("a plugin that is switched off stops being served, and its configuration section goes with it", hostWhileDisabled === null && detailWhileDisabled.configCount === 0, JSON.stringify({ host: hostWhileDisabled, configCount: detailWhileDisabled.configCount }));
+    check("the switch and the row report the plugin as off", detailWhileDisabled.switches.some((item) => item.label === componentSwitch && item.checked === "false") && detailWhileDisabled.rows.some((item) => item.state === "off"), JSON.stringify({ switches: detailWhileDisabled.switches, rows: detailWhileDisabled.rows }));
+    check("the disable is recorded in the profile's patch file, on the plugin's own row", /disabled:\s*true/.test(patchRow(patchWhileDisabled, PROBE_NS)), patchRow(patchWhileDisabled, PROBE_NS).replace(/\n/g, " | ").slice(0, 240));
+
+    await waitForValue(cdp, switchIdle(componentSwitch), "the component switch to be usable again", 25000);
+    const markBeforeReEnable = probeRequestMark();
+    const reEnableClick = await cdp.eval("window.__e2ePlugins.clickSwitch(" + JSON.stringify(componentSwitch) + ")");
+    await waitForValue(cdp, switchReports(componentSwitch, "true"), "the page to report the plugin as on again", 25000);
+    await waitForValue(cdp, "window.__e2ePlugins.detail().fieldIds.indexOf(" + JSON.stringify(PROBE_LABEL_FIELD) + ") !== -1", "the configuration form to come back", 25000);
+    const reEnableCalls = probeCalls(markBeforeReEnable, "pluginManager/setPluginEnabled");
+    const hostAfterReEnable = await servedProbe();
+    const patchAfterReEnable = await readPatch();
+    const fieldsAfterReEnable = await probeFields();
+    probeEvidence.componentOn = { calls: reEnableCalls, host: hostAfterReEnable, patchRow: patchRow(patchAfterReEnable, PROBE_NS) };
+    check("switching the component back on restores the plugin and the value it had saved", reEnableClick === "clicked" && reEnableCalls.length === 1 && reEnableCalls[0].args.enabled === true && hostAfterReEnable !== null && hostAfterReEnable.value.label === hostBeforeSwitches.value.label && fieldOf(fieldsAfterReEnable, PROBE_LABEL_FIELD).value === hostAfterReEnable.value.label, JSON.stringify({ calls: reEnableCalls, host: hostAfterReEnable, fields: fieldsAfterReEnable }));
+    check("the re-enable is recorded in the profile's patch file, on the same row", /disabled:\s*false/.test(patchRow(patchAfterReEnable, PROBE_NS)), patchRow(patchAfterReEnable, PROBE_NS).replace(/\n/g, " | ").slice(0, 240));
+
+    await waitForValue(cdp, switchIdle(bundleSwitch), "the bundle switch to be usable", 25000);
+    const markBeforeBundleOff = probeRequestMark();
+    const bundleOffClick = await cdp.eval("window.__e2ePlugins.clickSwitch(" + JSON.stringify(bundleSwitch) + ")");
+    await waitForValue(cdp, switchReports(bundleSwitch, "false"), "the page to report the bundle as off", 25000);
+    /* Switching a whole bundle is the plugin manager's other call: setBundleEnabled, keyed by the bundle's
+       own package name (the row switch above is setPluginEnabled, keyed by the entry id). */
+    const bundleOffCalls = probeCalls(markBeforeBundleOff, "pluginManager/setBundleEnabled");
+    const detailBundleOff = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.detail())"));
+    const hostWhileBundleOff = await servedProbe();
+    probeEvidence.bundleOff = { calls: bundleOffCalls, switches: detailBundleOff.switches, rows: detailBundleOff.rows, host: hostWhileBundleOff };
+    check("switching the bundle off is the plugin manager's own bundle call, keyed by the bundle's package name", bundleOffClick === "clicked" && bundleOffCalls.length === 1 && bundleOffCalls[0].args.name === PROBE_PACKAGE && bundleOffCalls[0].args.enabled === false, JSON.stringify(bundleOffCalls));
+    check("with the bundle off the whole plugin is gone: nothing is served, no form, and the row reports it off", hostWhileBundleOff === null && detailBundleOff.configCount === 0 && detailBundleOff.rows.some((item) => item.state === "off"), JSON.stringify({ host: hostWhileBundleOff, configCount: detailBundleOff.configCount, rows: detailBundleOff.rows }));
+    await waitForValue(cdp, switchIdle(bundleSwitch), "the bundle switch to be usable again", 25000);
+    const markBeforeBundleOn = probeRequestMark();
+    const bundleOnClick = await cdp.eval("window.__e2ePlugins.clickSwitch(" + JSON.stringify(bundleSwitch) + ")");
+    await waitForValue(cdp, switchReports(bundleSwitch, "true"), "the page to report the bundle as on again", 25000);
+    await waitForValue(cdp, "window.__e2ePlugins.detail().fieldIds.indexOf(" + JSON.stringify(PROBE_LABEL_FIELD) + ") !== -1", "the configuration form to come back with the bundle", 25000);
+    const hostAfterBundleRoundTrip = await servedProbe();
+    const fieldsAfterBundleRoundTrip = await probeFields();
+    const bundleOnCalls = probeCalls(markBeforeBundleOn, "pluginManager/setBundleEnabled");
+    probeEvidence.bundleOn = { calls: bundleOnCalls, host: hostAfterBundleRoundTrip, fields: fieldsAfterBundleRoundTrip };
+    check("the bundle's own switch round trip leaves the plugin serving the value it had saved", bundleOnClick === "clicked" && bundleOnCalls.length === 1 && bundleOnCalls[0].args.name === PROBE_PACKAGE && bundleOnCalls[0].args.enabled === true && hostAfterBundleRoundTrip !== null && hostAfterBundleRoundTrip.value.label === hostAfterReEnable.value.label && fieldOf(fieldsAfterBundleRoundTrip, PROBE_LABEL_FIELD).value === hostAfterBundleRoundTrip.value.label, JSON.stringify({ host: hostAfterBundleRoundTrip, fields: fieldsAfterBundleRoundTrip }));
+
+    /* ------------------- The deployment's OWN explicit-save plugin form -------------------
+       Everything above proves that a THIRD-PARTY package can register a form into the standard slot and drive
+       it. The criterion also names a form the DEPLOYMENT ships, so the same remote plugin list is now used to
+       drive the Web search configuration page: a page nobody wrote for this test, on a namespace the Host
+       serves on its own. Its ids and its copy are the product's own. ------------------------------------ */
+    await navigate(remoteUrl4);
+    const shippedOpened = await openItemPage("the deployment's own form", SHIPPED_ITEM, SHIPPED_ENDPOINT_FIELD);
+    const shippedHostAtOpen = await servedNamespace(SHIPPED_NS);
+    const shippedFieldsAtOpen = await pageFields([SHIPPED_KEY_FIELD, SHIPPED_ENDPOINT_FIELD, SHIPPED_MAX_USES_FIELD]);
+    const shippedParagraphsAtOpen = await pageParagraphs();
+    const shippedSaveAtOpen = await pageSave();
+    probeEvidence.shipped = { opened: shippedOpened, host: shippedHostAtOpen, fields: shippedFieldsAtOpen, paragraphs: shippedParagraphsAtOpen, save: shippedSaveAtOpen };
+    /* The deployment's own page registers into plugins.item, so the manager gives it a section of its own (one
+       [data-plugin-config] and the product's own field ids) instead of the bundle slot the fixture uses. */
+    check("the deployment's own configuration page is reachable from the same remote plugin list, on its own field ids", shippedOpened.items.some((text) => text.indexOf(SHIPPED_ITEM) !== -1) && shippedOpened.detail.configCount === 1 && [SHIPPED_KEY_FIELD, SHIPPED_ENDPOINT_FIELD, SHIPPED_MAX_USES_FIELD].every((id) => shippedOpened.detail.fieldIds.indexOf(id) !== -1), JSON.stringify({ items: shippedOpened.items, detail: { detailCount: shippedOpened.detail.detailCount, configCount: shippedOpened.detail.configCount, slotPresent: shippedOpened.detail.slotPresent, fieldIds: shippedOpened.detail.fieldIds } }).slice(0, 600));
+    check("it renders the deployment's own copy and its own fields, and opens with nothing to save", shippedOpened.items.some((text) => text.indexOf(SHIPPED_COPY.description) !== -1) && shippedParagraphsAtOpen.indexOf(SHIPPED_COPY.baseUrlHint) !== -1 && shippedParagraphsAtOpen.indexOf(SHIPPED_COPY.maxUsesHint) !== -1 && shippedFieldsAtOpen.every((field) => field.present === true) && shippedSaveAtOpen.text === SHIPPED_COPY.save && shippedSaveAtOpen.disabled === true, JSON.stringify({ save: shippedSaveAtOpen, paragraphs: shippedParagraphsAtOpen }));
+    check("the deployment's own page reads its values from the instance", shippedHostAtOpen !== null && shippedHostAtOpen.writable === true && fieldOf(shippedFieldsAtOpen, SHIPPED_MAX_USES_FIELD).value === String(shippedHostAtOpen.value.maxUses), JSON.stringify({ page: shippedFieldsAtOpen, host: shippedHostAtOpen === null ? null : shippedHostAtOpen.value }));
+
+    /* Staged edit on the deployment's own form: visible in the page, and nothing else moves. */
+    const shippedPatchBeforeDraft = await readPatch();
+    const markBeforeShippedDraft = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(SHIPPED_MAX_USES_FIELD) + ")", String(SHIPPED_SAVED_MAX_USES));
+    await sleep(700);
+    const shippedFieldsStaged = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const shippedSaveStaged = await pageSave();
+    const shippedWritesWhileStaged = pageCalls(markBeforeShippedDraft, "settings/mutate", SHIPPED_NS);
+    const shippedHostWhileStaged = await servedNamespace(SHIPPED_NS);
+    const shippedPatchWhileStaged = await readPatch();
+    probeEvidence.shippedDraft = { writes: shippedWritesWhileStaged, fields: shippedFieldsStaged, save: shippedSaveStaged, host: shippedHostWhileStaged, patchRow: patchRow(shippedPatchWhileStaged, SHIPPED_NS) };
+    check("editing the deployment's own form stages the value without touching the instance's configuration", fieldOf(shippedFieldsStaged, SHIPPED_MAX_USES_FIELD).value === String(SHIPPED_SAVED_MAX_USES) && shippedSaveStaged.disabled === false && shippedWritesWhileStaged.length === 0 && shippedHostWhileStaged.revision === shippedHostAtOpen.revision && shippedHostWhileStaged.value.maxUses === shippedHostAtOpen.value.maxUses && shippedPatchWhileStaged === shippedPatchBeforeDraft, JSON.stringify({ fields: shippedFieldsStaged, writes: shippedWritesWhileStaged, host: shippedHostWhileStaged }));
+
+    /* The save: one standard settings write, carrying the revision the draft was staged at. */
+    const markBeforeShippedSave = probeRequestMark();
+    const shippedSaveClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await waitForValue(cdp, "window.__e2ePlugins.save().disabled === true", "the deployment's own form to accept the save", 25000);
+    const shippedSaveWrites = pageCalls(markBeforeShippedSave, "settings/mutate", SHIPPED_NS);
+    const shippedFieldsSaved = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const shippedHostAfterSave = await servedNamespace(SHIPPED_NS);
+    const shippedPatchAfterSave = await readPatch();
+    probeEvidence.shippedSave = { writes: shippedSaveWrites, fields: shippedFieldsSaved, host: shippedHostAfterSave, patchRow: patchRow(shippedPatchAfterSave, SHIPPED_NS) };
+    check("saving the deployment's own form is one standard settings write, carrying the revision it read", shippedSaveClick === "clicked" && shippedSaveWrites.length === 1 && shippedSaveWrites[0].args.ns === SHIPPED_NS && shippedSaveWrites[0].args.expectedRevision === shippedHostAtOpen.revision && shippedSaveWrites[0].args.ops.length === 1 && shippedSaveWrites[0].args.ops[0].path.join(".") === "maxUses" && shippedSaveWrites[0].args.ops[0].value === SHIPPED_SAVED_MAX_USES, JSON.stringify(shippedSaveWrites));
+    check("the saved value is in the instance and in the profile's patch file, and the form is clean again", shippedHostAfterSave.revision === shippedHostAtOpen.revision + 1 && shippedHostAfterSave.value.maxUses === SHIPPED_SAVED_MAX_USES && shippedHostAfterSave.user.maxUses === SHIPPED_SAVED_MAX_USES && /maxUses:\s*7(\s|$)/.test(patchRow(shippedPatchAfterSave, SHIPPED_NS)) && fieldOf(shippedFieldsSaved, SHIPPED_MAX_USES_FIELD).value === String(SHIPPED_SAVED_MAX_USES), JSON.stringify({ host: shippedHostAfterSave, patchRow: patchRow(shippedPatchAfterSave, SHIPPED_NS) }));
+
+    /* The same stale-revision race, on the deployment's own form: the draft was staged at the revision the page
+       read, another end has moved past it, and the save has to be refused instead of overwriting it. */
+    const markBeforeShippedStale = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(SHIPPED_MAX_USES_FIELD) + ")", String(SHIPPED_STALE_MAX_USES));
+    await sleep(700);
+    const shippedOtherEnd = await remoteRpc("settings/mutate", { ns: SHIPPED_NS, ops: [{ op: "set", path: ["maxUses"], value: SHIPPED_OTHER_END_MAX_USES }], expectedRevision: shippedHostAfterSave.revision });
+    const shippedHostAfterOtherEnd = await servedNamespace(SHIPPED_NS);
+    const shippedStaleClick = await cdp.eval("window.__e2ePlugins.clickSave()");
+    await waitForValue(cdp, "window.__e2ePlugins.paragraphs().indexOf(" + JSON.stringify(SHIPPED_COPY.saveFailed) + ") !== -1", "the deployment's own form to report the refusal", 25000);
+    const shippedStaleWrites = pageCalls(markBeforeShippedStale, "settings/mutate", SHIPPED_NS);
+    const shippedFieldsStale = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const shippedSaveStale = await pageSave();
+    const shippedHostAfterStale = await servedNamespace(SHIPPED_NS);
+    const shippedPatchAfterStale = await readPatch();
+    probeEvidence.shippedStale = { otherEnd: shippedOtherEnd, writes: shippedStaleWrites, fields: shippedFieldsStale, host: shippedHostAfterStale, patchRow: patchRow(shippedPatchAfterStale, SHIPPED_NS) };
+    check("the deployment's own form sends the revision it staged at, which the other end has moved past", shippedOtherEnd.ok === true && shippedHostAfterOtherEnd.revision === shippedHostAfterSave.revision + 1 && shippedStaleClick === "clicked" && shippedStaleWrites.length === 1 && shippedStaleWrites[0].args.expectedRevision === shippedHostAfterSave.revision, JSON.stringify({ writes: shippedStaleWrites, host: shippedHostAfterOtherEnd }));
+    check("its refused save is reported in the deployment's own failure copy, keeps the draft, and leaves the other end's value in place", shippedFieldsStale[0].value === String(SHIPPED_STALE_MAX_USES) && shippedSaveStale.disabled === false && shippedHostAfterStale.value.maxUses === SHIPPED_OTHER_END_MAX_USES && /maxUses:\s*6(\s|$)/.test(patchRow(shippedPatchAfterStale, SHIPPED_NS)), JSON.stringify({ fields: shippedFieldsStale, save: shippedSaveStale, host: shippedHostAfterStale, patchRow: patchRow(shippedPatchAfterStale, SHIPPED_NS) }));
+
+    /* Input the deployment's own form cannot read: refused in the page, never sent anywhere. */
+    const markBeforeShippedInvalid = probeRequestMark();
+    await typeText(cdp, "window.__e2ePlugins.focusField(" + JSON.stringify(SHIPPED_MAX_USES_FIELD) + ")", PROBE_UNPARSEABLE);
+    await sleep(700);
+    const shippedFieldsInvalid = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const shippedSaveInvalid = await pageSave();
+    const shippedWritesWhileInvalid = pageCalls(markBeforeShippedInvalid, "settings/mutate", SHIPPED_NS);
+    probeEvidence.shippedInvalid = { fields: shippedFieldsInvalid, save: shippedSaveInvalid, writes: shippedWritesWhileInvalid };
+    check("unreadable input on the deployment's own form is refused in its own copy and never written", fieldOf(shippedFieldsInvalid, SHIPPED_MAX_USES_FIELD).invalid === "true" && fieldOf(shippedFieldsInvalid, SHIPPED_MAX_USES_FIELD).message === SHIPPED_COPY.invalidNumber && shippedSaveInvalid.disabled === true && shippedWritesWhileInvalid.length === 0, JSON.stringify({ fields: shippedFieldsInvalid, save: shippedSaveInvalid, writes: shippedWritesWhileInvalid }));
+    await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-16-shipped-form.png"));
+
+    /* ------------------- Persistence: interruption, refresh, restart -------------------
+       The stored values have to survive more than the page that wrote them: a real transport interruption in the
+       middle of that page (no reload inside the window), then a fresh document, then a fresh process. */
+    /* The window the two forms above ran in closes here, so the interruption below gets a stage of its own. */
+    assertLiveTransport("afterPluginShippedForm");
+    assertNoStageErrors("afterPluginShippedForm", true);
+
+    const pluginDocUrl = String(await cdp.eval("String(location.href)"));
+    const pluginPreReconnect = cdp.liveConnections();
+    discontinue("forced offline on the plugin page");
+    let pluginOfflineApplied = true;
+    try { await cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
+    catch (error) { pluginOfflineApplied = false; probeEvidence.offlineError = String(error); }
+    check("the harness can really take the plugin page offline through CDP", pluginOfflineApplied === true && pluginPreReconnect.length > 0, JSON.stringify({ applied: pluginOfflineApplied, connections: pluginPreReconnect }));
+    await sleep(4000);
+    const pluginTransportWhileOffline = await cdp.eval(transportProbe).catch((error) => "eval-failed:" + String(error));
+    probeEvidence.transportWhileOffline = pluginTransportWhileOffline;
+    check("while offline the plugin page's own settings transport fails at the network layer", /^(failed|closed)$/.test(String(pluginTransportWhileOffline)), String(pluginTransportWhileOffline));
+    const pluginReachWhileOffline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
+    probeEvidence.reachWhileOffline = pluginReachWhileOffline;
+    check("while offline the plugin page's own transport request genuinely fails", /^rejected:/.test(String(pluginReachWhileOffline)), String(pluginReachWhileOffline).slice(0, 160));
+    try { await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }); }
+    catch (error) { probeEvidence.onlineError = String(error); }
+    await sleep(8000);
+    const pluginReachAfterOnline = await cdp.eval(reachProbe).catch((error) => "eval-failed:" + String(error));
+    probeEvidence.reachAfterOnline = pluginReachAfterOnline;
+    check("after the network returns the SAME document reaches the instance again, on a new streaming connection", /^status:/.test(String(pluginReachAfterOnline)), String(pluginReachAfterOnline).slice(0, 160));
+    /* What the interruption left behind on that very document: it never reloaded, so the form it was showing has
+       to still be mounted and still be showing a value. What the instance stores is read back further down. */
+    const pluginFormAfterReconnect = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const pluginSaveAfterReconnect = await pageSave();
+    probeEvidence.reconnectForm = { fields: pluginFormAfterReconnect, save: pluginSaveAfterReconnect };
+    check("the form that was open when the network went away is still mounted on the same document", fieldOf(pluginFormAfterReconnect, SHIPPED_MAX_USES_FIELD).present === true && fieldOf(pluginFormAfterReconnect, SHIPPED_MAX_USES_FIELD).value !== null && pluginSaveAfterReconnect.present === true, JSON.stringify({ fields: pluginFormAfterReconnect, save: pluginSaveAfterReconnect }));
+    assertLiveTransport("afterPluginReconnect");
+    assertNoStageErrors("afterPluginReconnect", true, pluginDocUrl, true);
+
+    /* A fresh document, on the same instance: both forms have to show what the instance stores, not drafts. */
+    await navigate(remoteUrl4);
+    await openPluginPage("after the interruption", true);
+    const probeHostAfterReload = await servedProbe();
+    const probeFieldsAfterReload = await probeFields();
+    check("a fresh document still shows the plugin's stored value after the interruption", probeHostAfterReload !== null && fieldOf(probeFieldsAfterReload, PROBE_LABEL_FIELD).value === probeHostAfterReload.value.label && probeHostAfterReload.value.label === hostBeforeSwitches.value.label, JSON.stringify({ host: probeHostAfterReload, fields: probeFieldsAfterReload }));
+    await navigate(remoteUrl4);
+    await openItemPage("after the interruption", SHIPPED_ITEM, SHIPPED_ENDPOINT_FIELD);
+    const shippedHostAfterReload = await servedNamespace(SHIPPED_NS);
+    const shippedFieldsAfterReload = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    check("the deployment's own form shows the stored value again after the interruption, not the refused draft", fieldOf(shippedFieldsAfterReload, SHIPPED_MAX_USES_FIELD).value === String(SHIPPED_OTHER_END_MAX_USES) && shippedHostAfterReload.value.maxUses === SHIPPED_OTHER_END_MAX_USES, JSON.stringify({ host: shippedHostAfterReload, fields: shippedFieldsAfterReload }));
+
+    /* And a fresh process: the bundle list and every stored value are read again from disk. */
+    discontinue("instance restart after the plugin page");
+    instance.child.kill("SIGTERM");
+    await sleep(3000);
+    instance = await startInstance(home, PROFILE);
+    remoteRpc = rpcFor(instance.url);
+    const afterProbeRestart = new URL(instance.url);
+    const remoteUrl5 = "http://" + TEST_HOST + ":" + afterProbeRestart.port + "/" + afterProbeRestart.search;
+    evidence.urls.remoteWithProbePluginAfterRestart = remoteUrl5;
+    await navigate(remoteUrl5);
+    await openPluginPage("after the instance restarted", true);
+    const probeHostAfterRestart = await servedProbe();
+    const probeFieldsAfterRestart = await probeFields();
+    const probePatchAfterRestart = await readPatch();
+    check("the plugin's stored value survives a restart of the instance, in the instance and in the profile", probeHostAfterRestart !== null && fieldOf(probeFieldsAfterRestart, PROBE_LABEL_FIELD).value === probeHostAfterRestart.value.label && probeHostAfterRestart.value.label === hostBeforeSwitches.value.label && patchRow(probePatchAfterRestart, PROBE_NS).indexOf(probeHostAfterRestart.value.label) !== -1, JSON.stringify({ host: probeHostAfterRestart, fields: probeFieldsAfterRestart, patchRow: patchRow(probePatchAfterRestart, PROBE_NS) }));
+    await navigate(remoteUrl5);
+    await openItemPage("after the instance restarted", SHIPPED_ITEM, SHIPPED_ENDPOINT_FIELD);
+    const shippedHostAfterRestart = await servedNamespace(SHIPPED_NS);
+    const shippedFieldsAfterRestart = await pageFields([SHIPPED_MAX_USES_FIELD]);
+    const shippedPatchAfterRestart = await readPatch();
+    probeEvidence.restart = { probe: { host: probeHostAfterRestart, fields: probeFieldsAfterRestart }, shipped: { host: shippedHostAfterRestart, fields: shippedFieldsAfterRestart } };
+    check("the deployment's own form reads its stored value back after a restart of the instance", fieldOf(shippedFieldsAfterRestart, SHIPPED_MAX_USES_FIELD).value === String(SHIPPED_OTHER_END_MAX_USES) && shippedHostAfterRestart.value.maxUses === SHIPPED_OTHER_END_MAX_USES && /maxUses:\s*6(\s|$)/.test(patchRow(shippedPatchAfterRestart, SHIPPED_NS)), JSON.stringify({ host: shippedHostAfterRestart, fields: shippedFieldsAfterRestart, patchRow: patchRow(shippedPatchAfterRestart, SHIPPED_NS) }));
+    await sleep(1500);
+
+    /* The offline window was accounted for by its own stage above. What this window holds is the harness
+       navigating and restarting the instance, so a teardown is accepted only as the harness's own doing. */
+    assertLiveTransport("afterPluginPage");
+    assertNoStageErrors("afterPluginPage", true);
+  } else {
+    /* CONTROL: the same plugin, installed the same way, on the same remote origin. The ORIGINAL composition
+       keeps its settings state in the page, so it never reads a namespace from the instance and no
+       configuration form is registered for the bundle at all. The bundle itself is still listed and still
+       manageable; what is missing is the form - and the instance does serve the namespace to anyone who asks
+       through the public RPC, which is what shows the difference is the replacement and not the fixture. */
+    const hostInControl = await servedProbe();
+    const shippedHostInControl = await servedNamespace(SHIPPED_NS);
+    /* Before the fixture's own card is opened, the LIST itself is read, because opening a card replaces it: in
+       the original composition the pages the deployment ships are missing from the list as well, even while the
+       instance still serves the namespace behind them. */
+    await settlePage("control list");
+    const controlNav = await cdp.eval("window.__e2ePlugins.openPlugins()");
+    await sleep(2500);
+    const itemsInControl = JSON.parse(await cdp.eval("JSON.stringify(window.__e2ePlugins.items())"));
+    const controlShippedOpen = await cdp.eval("window.__e2ePlugins.openItem(" + JSON.stringify(SHIPPED_ITEM) + ")");
+    const controlShippedFields = await pageFields([SHIPPED_KEY_FIELD, SHIPPED_ENDPOINT_FIELD, SHIPPED_MAX_USES_FIELD]);
+    const openedInControl = await openPluginPage("control open", false);
+    const fieldsInControl = await probeFields();
+    probeEvidence.control = { host: hostInControl, shippedHost: shippedHostInControl, items: itemsInControl, shippedOpen: controlShippedOpen, shippedFields: controlShippedFields, cards: openedInControl.cards, detail: openedInControl.detail, fields: fieldsInControl };
+    check("CONTROL: the instance serves the third-party plugin's namespace all the same", hostInControl !== null && hostInControl.value.label === PROBE_DEFAULT_LABEL && hostInControl.value.attempts === PROBE_DEFAULT_ATTEMPTS, JSON.stringify(hostInControl));
+    check("CONTROL: the page lists the installed third-party bundle", openedInControl.cards.some((card) => card.pkg === PROBE_PACKAGE) && openedInControl.detail.detailCount === 1, JSON.stringify({ cards: openedInControl.cards, detailCount: openedInControl.detail.detailCount }));
+    check("CONTROL: the original composition mounts no configuration form for the plugin on a remote origin", openedInControl.detail.slotPresent === false && openedInControl.detail.configCount === 0 && openedInControl.detail.fieldIds.length === 0 && fieldsInControl.every((field) => field.present === false), JSON.stringify({ slotPresent: openedInControl.detail.slotPresent, configCount: openedInControl.detail.configCount, fieldIds: openedInControl.detail.fieldIds }));
+    check("CONTROL: the original composition mounts none of the deployment's own plugin forms on a remote origin either", controlNav === "clicked" && itemsInControl.every((text) => text.indexOf(SHIPPED_ITEM) === -1) && controlShippedOpen === "no-card" && controlShippedFields.every((field) => field.present === false) && shippedHostInControl !== null && shippedHostInControl.value.maxUses === 5, JSON.stringify({ items: itemsInControl, shippedOpen: controlShippedOpen, shippedFields: controlShippedFields, shippedHost: shippedHostInControl }));
+    await cdp.screenshot(join(EVIDENCE_DIR, MODE + "-15-plugin-page.png"));
+    assertLiveTransport("afterPluginPage");
+    assertNoStageErrors("afterPluginPage", true);
+  }
+
+  /* The plugin stage above resets its own accounting before it finishes, so nothing disruptive is left between
+     the last stage and this point: the final stage tolerates nothing. */
   assertLiveTransport("atEnd");
   assertNoStageErrors("atEnd", false);
   evidence.consoleFullTail = cdp.errors().slice(-8);
